@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from codeknowl import db
+from codeknowl.artifacts import dump_dataclasses, repo_snapshot_dir, write_json
+from codeknowl.indexing import build_file_inventory, extract_symbols_and_calls
 from codeknowl.repo import get_head_commit
 
 
@@ -119,6 +121,16 @@ class CodeKnowlService:
 
         try:
             head_commit = get_head_commit(repo_path)
+        except Exception as exc:  # noqa: BLE001
+            return self.fail_index_run(run_id, error=str(exc))
+
+        try:
+            files = build_file_inventory(repo_path)
+            symbols, calls = extract_symbols_and_calls(repo_path)
+            out_dir = repo_snapshot_dir(self._data_dir, repo.repo_id, head_commit)
+            write_json(out_dir / "files.json", dump_dataclasses(files))
+            write_json(out_dir / "symbols.json", dump_dataclasses(symbols))
+            write_json(out_dir / "calls.json", dump_dataclasses(calls))
         except Exception as exc:  # noqa: BLE001
             return self.fail_index_run(run_id, error=str(exc))
 
