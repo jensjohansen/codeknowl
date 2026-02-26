@@ -40,6 +40,47 @@ This document defines repository-wide coding standards and Definition of Done (D
    - Third-party notices must be updated as needed in `THIRD_PARTY_NOTICES.md`.
 4. To encourage simplicity, files should be kept to 1200 lines of code or fewer. Larger files require management approval.
 
+5. Per-file header (required)
+   - Every file that supports comments must include a header at the top containing:
+     - the file name and repository-relative path
+     - a short description of what it provides
+     - why it matters to the product/business
+     - copyright and license
+
+   Python template:
+   ```python
+   """
+   File: backend/src/codeknowl/example.py
+   Purpose: <what this file provides>
+   Product/business importance: <why this matters to CodeKnowl>
+
+   Copyright (c) 2026 John K Johansen
+   License: MIT (see LICENSE)
+   """
+   
+   from __future__ import annotations
+   ```
+
+   Shell template:
+   ```bash
+   # File: backend/scripts/example.sh
+   # Purpose: <what this file provides>
+   # Product/business importance: <why this matters to CodeKnowl>
+   #
+   # Copyright (c) 2026 John K Johansen
+   # License: MIT (see LICENSE)
+   ```
+
+   YAML/TOML template:
+   ```yaml
+   # File: .github/workflows/example.yml
+   # Purpose: <what this file provides>
+   # Product/business importance: <why this matters to CodeKnowl>
+   #
+   # Copyright (c) 2026 John K Johansen
+   # License: MIT (see LICENSE)
+   ```
+
 ```mermaid
 flowchart LR
   Plan[Plan change] --> Implement[Implement]
