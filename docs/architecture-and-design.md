@@ -11,6 +11,25 @@ This document is the tactical and functional specification for CodeKnowl. It tra
 
 This document intentionally avoids making new technical choices. Where a concrete technology decision is required, it references the ITD register by ID.
 
+### 1.1 At a glance
+
+| Concern | Design intent |
+| --- | --- |
+| Evidence model | Deterministic retrieval produces citations and relationship paths; LLM produces narrative |
+| Primary UX | IDE extension calls backend APIs; citations must be clickable |
+| Work separation | Indexing is async; Q&A/retrieval is latency-sensitive |
+| Storage | Relationship store + semantic index + artifact/document storage |
+| Compliance posture | On-prem, local-first, no required cloud runtime dependencies |
+
+```mermaid
+flowchart LR
+  dev[Developer] -->|Q&A / navigation| codeknowl[CodeKnowl]
+  op[Operator] -->|Admin / status| codeknowl
+  codeknowl -->|Clone/pull| git[Git Provider]
+  codeknowl -->|AuthN/AuthZ| idp[Identity Provider]
+  codeknowl -->|Chat/embeddings/rerank| models[Model Services]
+```
+
 ## 2. Scope
 
 ### 2.1 In scope
@@ -58,6 +77,18 @@ This document intentionally avoids making new technical choices. Where a concret
 - **Model services**: on-prem model serving runtime (per ITD).
 
 ## 6. Component model
+
+### 6.0 Component summary (table)
+
+| Component | Primary responsibility | Latency profile |
+| --- | --- | --- |
+| IDE Extension | UI, commands, citation navigation | Interactive |
+| Backend API | Auth, orchestration, query routing | Interactive |
+| Ingestion | Clone/pull, repo snapshots | Async |
+| Indexing pipeline | Parse/extract/chunk/embed/index | Async |
+| Relationship service | Traversals / impact analysis | Interactive |
+| Semantic retrieval | Vector search + rerank | Interactive |
+| Findings ingestion (optional) | Ingest SARIF/JSON | Async |
 
 ### 6.1 IDE Extension
 Responsibilities:
@@ -152,6 +183,41 @@ Responsibilities:
 Non-goal:
 - CodeKnowl does not bundle scanner binaries in MVP OSS distribution.
 
+```mermaid
+flowchart LR
+  subgraph UX[User experience]
+    IDE[IDE Extension]
+  end
+  subgraph Core[Core services]
+    API[Backend API]
+    REL[Relationship Service]
+    SEM[Semantic Retrieval]
+    MODELS[Model Orchestration]
+  end
+  subgraph Async[Async pipeline]
+    ING[Ingestion]
+    PIPE[Indexing / Analysis]
+    FIND[Findings Ingestion]
+  end
+  subgraph Stores[Stores]
+    GRAPH[(Graph Store)]
+    VEC[(Vector Store)]
+    DOC[(Artifact/Document Store)]
+  end
+  IDE --> API
+  API --> REL
+  API --> SEM
+  API --> MODELS
+  ING --> PIPE
+  PIPE --> GRAPH
+  PIPE --> VEC
+  PIPE --> DOC
+  FIND --> DOC
+  FIND --> GRAPH
+  REL --> GRAPH
+  SEM --> VEC
+```
+
 ## 7. Data model (logical)
 
 ### 7.1 Core identifiers
@@ -184,6 +250,22 @@ Non-goal:
 4. Indexing pipeline performs full index for snapshot.
 5. Status becomes “indexed” with last indexed commit.
 
+```mermaid
+sequenceDiagram
+  participant U as Operator/Developer
+  participant API as Backend API
+  participant ING as Ingestion
+  participant PIPE as Indexing Pipeline
+  participant S as Stores
+  U->>API: Register repo + auth
+  API->>ING: Validate + clone/pull
+  ING-->>API: Snapshot (commit hash)
+  API->>PIPE: Enqueue full index job
+  PIPE->>S: Write entities/edges/chunks/embeddings
+  PIPE-->>API: Index complete + status
+  API-->>U: Repo status (indexed)
+```
+
 ### 8.2 Ask a question with citations
 1. IDE sends question + repo scope.
 2. Backend authorizes access.
@@ -208,6 +290,18 @@ Non-goal:
 2. Pipeline identifies changed files.
 3. Recompute affected symbols/edges/chunks/embeddings.
 4. Update snapshot index state.
+
+```mermaid
+flowchart TB
+  A[New commit detected] --> B[Determine changed files]
+  B --> C[Re-parse changed files]
+  C --> D[Update symbols/relationships]
+  C --> E[Re-chunk + re-embed]
+  D --> F[Persist graph updates]
+  E --> G[Persist vector updates]
+  F --> H[Mark snapshot indexed]
+  G --> H
+```
 
 ### 8.5 Findings ingestion (optional)
 1. CI uploads SARIF/JSON for a repo snapshot.

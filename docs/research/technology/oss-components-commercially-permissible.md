@@ -47,6 +47,22 @@ Parking lot:
 - Official Docker images (including any “tools” image) are deferred until adopter demand justifies the ongoing maintenance burden.
 - Internal deployments may still use organization-managed container images (e.g., via a private registry), but that is separate from the open-source distribution posture.
 
+### Policy summary (table)
+
+| Classification | What it means for CodeKnowl OSS |
+| --- | --- |
+| Redistribute (bundle) | Safe to include in repository and/or release artifacts |
+| Integrate-only (user-supplied) | Supported by invocation/ingestion, but CodeKnowl does not bundle binaries/rules |
+| Exclude | Not supported in OSS offering due to licensing/terms risk |
+
+```mermaid
+flowchart LR
+  TOOL[Scanner/tool] -->|Produces| OUT[JSON/SARIF]
+  OUT -->|Ingest| CK[CodeKnowl]
+  CK -->|Normalize| F[Findings model]
+  CK -->|Link| C[Citations to files/lines]
+```
+
 ## 1) SonarQube Community Build (SAST / code quality) — licensing caveat
 ### What it is
 SonarQube Community Build is an on-prem automated code review and static analysis tool.
@@ -119,6 +135,12 @@ ZAP is focused on security testing/assessment workflows for web applications.
   - Licensing complexity around Semgrep-maintained rules
 - OWASP ZAP:
   - Practical DAST baseline
+
+| Tool | Category | Posture |
+| --- | --- | --- |
+| SonarQube Community Build | SAST / quality | Exclude |
+| Semgrep CE (engine + rules caveat) | SAST | Exclude |
+| OWASP ZAP | DAST | Redistribute (bundle) |
 
 ## 5) Additional OSS components to consider (commercially common)
 
@@ -255,6 +277,44 @@ This shortlist targets “80–90% of the practical effect” of SonarQube/Semgr
   - Primary source (license): https://github.com/EmbarkStudios/cargo-deny/blob/main/LICENSE-MIT
 
 Note: Rust linting via Clippy is highly valuable, but its distribution posture should be treated as “included if redistributable in our packaging approach” because it is commonly installed as part of the Rust toolchain.
+
+```mermaid
+flowchart TB
+  subgraph Inputs
+    SRC[Repo source code]
+    CI[CI outputs]
+  end
+  subgraph Tools
+    SAST[Per-language scanners]
+    SCA[SCA/SBOM]
+    SECRETS[Secrets scanning]
+    IAC[IaC scanning]
+    DAST[DAST]
+  end
+  subgraph Outputs
+    SARIF[SARIF]
+    JSON[JSON]
+  end
+  subgraph CK[CodeKnowl]
+    INGEST[Ingest artifacts]
+    NORM[Normalize findings]
+    LINK[Link to snapshot + file/line]
+  end
+  SRC --> SAST
+  SRC --> SECRETS
+  SRC --> IAC
+  SRC --> SCA
+  CI --> DAST
+  SAST --> SARIF
+  SECRETS --> JSON
+  IAC --> JSON
+  SCA --> JSON
+  DAST --> JSON
+  SARIF --> INGEST
+  JSON --> INGEST
+  INGEST --> NORM
+  NORM --> LINK
+```
 
 ## 6) Resolutions for formerly “next items”
 

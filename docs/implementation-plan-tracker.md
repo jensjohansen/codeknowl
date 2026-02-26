@@ -9,6 +9,24 @@ This document is the core project planner for CodeKnowl implementation.
 
 This is not an ITD document. Technology decisions are tracked in the ITD register.
 
+### 1.1 At a glance
+
+| Item | Meaning |
+| --- | --- |
+| What this tracker is | The canonical milestone checklist aligned to the PRD |
+| What this tracker is not | A technical decision record (see ITDs) |
+| How to use it | Update statuses as code lands; link PRs/issues in Notes |
+
+```mermaid
+flowchart TB
+  M0[Milestone 0] --> M1[Milestone 1]
+  M1 --> M2[Milestone 2]
+  M2 --> M3[Milestone 3]
+  M3 --> M4[Milestone 4]
+  M0:::done
+  classDef done fill:#e6ffe6,stroke:#2f7d32,color:#000;
+```
+
 ## 2. Tracker conventions
 
 ### 2.1 Status values
@@ -28,6 +46,12 @@ Each work item uses:
 Milestones 0–4 are sourced from `docs/prd-revised.md` and reflected in `docs/architecture-and-design.md`.
 
 If milestone definitions drift, align the PRD first, then update this tracker.
+
+| Source | Authority |
+| --- | --- |
+| `docs/prd-revised.md` | Product requirements and milestone acceptance criteria |
+| `docs/architecture-and-design.md` | Tactical design mapped to milestones |
+| This tracker | Execution checklist and status |
 
 ---
 
@@ -69,6 +93,30 @@ If milestone definitions drift, align the PRD first, then update this tracker.
 - Index state is visible for the repo (last indexed commit and last successful run time).
 
 ### Workstreams and work items
+
+```mermaid
+flowchart LR
+  subgraph M1[Milestone 1: single-repo MVP]
+    A[Repo onboarding]
+    B[Indexing pipeline]
+    C[Semantic index]
+    D[Evidence-first Q&A]
+    E[Indexing status]
+  end
+  A --> B
+  B --> C
+  B --> D
+  C --> D
+  D --> E
+```
+
+| Workstream | Deliverable | PRD acceptance criteria supported |
+| --- | --- | --- |
+| A | Repo can be registered and cloned | Index run completes and reports completion |
+| B | Minimum entities/relationships extracted | Define/locate symbols and basic call relationships |
+| C | Chunks + embeddings stored/queryable | “Explain file/module” and semantic retrieval |
+| D | Retrieve → evidence bundle → answer | Answers include citations (file + line range) |
+| E | Status model + endpoint | Index state visible (commit + last successful run) |
 
 #### A) Repository onboarding and ingestion
 - [ ] Repo registration (URL + credentials) stored and retrievable
@@ -168,6 +216,19 @@ If milestone definitions drift, align the PRD first, then update this tracker.
 - The IDE experience clearly indicates indexing status and failure states.
 
 ### Workstreams and work items
+
+```mermaid
+sequenceDiagram
+  participant IDE as VS Code
+  participant API as Backend API
+  participant IDX as Indexing jobs
+  IDE->>API: Index current workspace
+  API->>IDX: Enqueue/execute index
+  IDX-->>API: Status updates
+  API-->>IDE: Indexing status
+  IDE->>API: Ask question
+  API-->>IDE: Answer + citations
+```
 
 #### A) VS Code extension shell
 - [ ] Extension scaffolding and configuration

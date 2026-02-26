@@ -17,6 +17,13 @@ This document defines repository-wide coding standards and Definition of Done (D
 8. Code complexity <= 10 for new/modified Python code.
 9. Rust dependency audits are clean (e.g., `cargo audit`/`cargo deny` if enabled in CI).
 
+| Gate | Applies to |
+| --- | --- |
+| Ruff lint | Python |
+| rustfmt + clippy | Rust |
+| ESLint + typecheck | TypeScript (VS Code extension) |
+| Tests | All |
+
 ---
 
 ## Manual Coding Standards (Python and Rust)
@@ -32,6 +39,15 @@ This document defines repository-wide coding standards and Definition of Done (D
    - If a tool/library is not redistributable-safe for the OSS posture, it must be excluded.
    - Third-party notices must be updated as needed in `THIRD_PARTY_NOTICES.md`.
 4. To encourage simplicity, files should be kept to 1200 lines of code or fewer. Larger files require management approval.
+
+```mermaid
+flowchart LR
+  Plan[Plan change] --> Implement[Implement]
+  Implement --> Test[Tests]
+  Test --> Review[Review]
+  Review --> Merge[Merge]
+  Merge --> Track[Update tracker]
+```
 
 ---
 
@@ -123,3 +139,12 @@ These are not intended to add process overhead; they are here to prevent common 
    - source code only
    - no bundled scanner binaries
    - no official Docker images
+
+| DoD area | Check |
+| --- | --- |
+| Product | PRD milestone acceptance criteria satisfied |
+| Design | Consistent with Architecture & Design doc (or deviation documented) |
+| Planning | Implementation tracker updated |
+| Quality | Tests updated and passing |
+| Security | No secrets introduced |
+| OSS posture | Packaging stance preserved |

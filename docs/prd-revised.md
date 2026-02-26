@@ -9,6 +9,29 @@ CodeKnowl is an on-prem, local-first “codebase analyst” product. Given one o
 
 CodeKnowl exposes an AI Software Analyst experience to end users primarily through an IDE extension, with optional CI-oriented workflows, designed to operate without required cloud dependencies (beyond access to Git hosts).
 
+### 1.1 At a glance
+
+| Area | Summary |
+| --- | --- |
+| Primary user experience | IDE-first (initially VS Code) Q&A with citations and navigation |
+| Primary outputs | Evidence-grounded answers, navigable relationships, and indexed snapshots |
+| Core stores | Structured relationship store + semantic index |
+| Operating posture | On-prem, local-first; no required cloud runtime dependencies |
+| OSS posture | MIT-licensed project with permissive, redistribution-safe dependencies |
+
+```mermaid
+flowchart TB
+  IDE[IDE Extension] -->|Questions / Navigation| API[Backend API]
+  API -->|Submit jobs| JOBS[Indexing Jobs]
+  JOBS --> ING[Ingestion]
+  JOBS --> PIPE[Indexing / Analysis]
+  PIPE --> GRAPH[Structured Relationship Store]
+  PIPE --> VEC[Semantic Index]
+  API -->|Retrieve evidence| GRAPH
+  API -->|Retrieve evidence| VEC
+  API -->|Answer w/ citations| IDE
+```
+
 ## 2. Problem Statement
 
 Teams need fast, trustworthy answers about their codebases:
@@ -86,6 +109,20 @@ Core workflows:
   - the relationship store
   - the knowledge base (including semantic indexes)
 - Provide status and alerting when indexing fails.
+
+```mermaid
+sequenceDiagram
+  participant U as User (IDE)
+  participant A as Backend API
+  participant R as Retrieval
+  participant L as LLM
+  U->>A: Ask question (repo-scoped)
+  A->>R: Retrieve evidence (semantic + traversal)
+  R-->>A: Evidence bundle (citations)
+  A->>L: Generate answer constrained to evidence
+  L-->>A: Answer text + references
+  A-->>U: Render answer with clickable citations
+```
 
 ## 6. Functional Requirements
 
@@ -332,6 +369,29 @@ Acceptance criteria:
   - indexing throughput and failures
   - system health status
 - The system meets a defined reliability target for indexing jobs over a representative time window.
+
+### 10.1 Milestone summary (table)
+
+| Milestone | Theme | User-visible outcome |
+| --- | --- | --- |
+| 0 | Baseline docs | PRD + architecture baseline and buy-vs-build plan |
+| 1 | Single-repo indexing | Index one repo, answer core questions with citations |
+| 2 | IDE extension MVP | IDE chat + explain + basic relationship navigation |
+| 3 | Incremental updates | Keep indexes fresh as commits land |
+| 4 | Multi-repo + hardening | Multiple repos, access control, reliability/observability |
+
+```mermaid
+gantt
+  title CodeKnowl release plan (conceptual)
+  dateFormat  YYYY-MM-DD
+  axisFormat  %b
+  section Milestones
+  Milestone 0 (baseline) :m0, 2026-01-01, 14d
+  Milestone 1 (single-repo) :m1, after m0, 28d
+  Milestone 2 (IDE MVP) :m2, after m1, 28d
+  Milestone 3 (incremental) :m3, after m2, 28d
+  Milestone 4 (multi-repo) :m4, after m3, 28d
+```
 
 ## 11. Success Metrics
 

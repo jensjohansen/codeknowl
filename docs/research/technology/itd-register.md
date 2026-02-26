@@ -7,6 +7,52 @@ Status values:
 - Completed: Decision made / direction chosen
 - Pending: Not yet decided
 
+## At a glance
+
+| Topic area | ITDs |
+| --- | --- |
+| Product surfaces | ITD-02, ITD-21 |
+| Core services | ITD-03, ITD-14 |
+| Storage | ITD-05, ITD-06, ITD-16 |
+| Identity and access | ITD-04 |
+| Models and inference | ITD-07, ITD-08, ITD-09, ITD-10, ITD-11, ITD-22 |
+| Operations | ITD-15, ITD-17, ITD-18 |
+| Analysis approach | ITD-01, ITD-12, ITD-13, ITD-20 |
+
+```mermaid
+flowchart TB
+  PRD[PRD requirements] --> ITDs[ITD decisions]
+  ITDs --> Arch[Architecture & design]
+  Arch --> Impl[Implementation]
+  Impl --> Feedback[Learning / iteration]
+  Feedback --> ITDs
+```
+
+| ID | Decision area | Status |
+| --- | --- | --- |
+| ITD-01 | CPG representation pattern | Completed |
+| ITD-02 | Primary UX: VS Code extension | Completed |
+| ITD-03 | API framework | Completed |
+| ITD-04 | AuthN/AuthZ integration | Completed |
+| ITD-05 | Graph database | Completed |
+| ITD-06 | Vector database | Completed |
+| ITD-07 | Inference runtime | Completed |
+| ITD-08 | Coding LLM | Completed |
+| ITD-09 | General LLM | Completed |
+| ITD-10 | Embeddings model | Completed |
+| ITD-11 | Reranker | Completed |
+| ITD-12 | AST parsing approach | Completed |
+| ITD-13 | Semantic facts contract | Completed |
+| ITD-14 | Job queue / workers | Completed |
+| ITD-15 | Deployment runtime | Completed |
+| ITD-16 | Persistent storage substrate | Completed |
+| ITD-17 | Baseline hardware platform | Completed |
+| ITD-18 | Observability | Completed |
+| ITD-19 | Code analysis integrations | Completed |
+| ITD-20 | CPG references | Completed |
+| ITD-21 | Frontend technology (non-extension) | Completed |
+| ITD-22 | Embeddings upgrade path | Completed |
+
 ## ITDs
 
 ### ITD-01 — Code representation pattern: Code Property Graph (CPG)
