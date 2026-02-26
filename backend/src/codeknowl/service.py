@@ -1,0 +1,142 @@
+from __future__ import annotations
+
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from codeknowl import db
+from codeknowl.repo import get_head_commit
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+@dataclass(frozen=True)
+class RepoRecord:
+    repo_id: str
+    local_path: str
+    created_at_utc: str
+
+
+@dataclass(frozen=True)
+class IndexRunRecord:
+    run_id: str
+    repo_id: str
+    status: str
+    started_at_utc: str
+    finished_at_utc: str | None
+    error: str | None
+    head_commit: str | None
+
+
+class CodeKnowlService:
+    def __init__(self, data_dir: Path):
+        self._data_dir = data_dir
+        self._conn = db.connect(data_dir)
+        db.init_schema(self._conn)
+
+    def register_repo_local_path(self, local_path: Path) -> RepoRecord:
+        repo_id = str(uuid.uuid4())
+        created_at_utc = _utc_now_iso()
+        self._conn.execute(
+            "INSERT INTO repos (repo_id, local_path, created_at_utc) VALUES (?, ?, ?)",
+            (repo_id, str(local_path), created_at_utc),
+        )
+        self._conn.commit()
+        return RepoRecord(repo_id=repo_id, local_path=str(local_path), created_at_utc=created_at_utc)
+
+    def list_repos(self) -> list[RepoRecord]:
+        rows = self._conn.execute("SELECT repo_id, local_path, created_at_utc FROM repos ORDER BY created_at_utc DESC")
+        return [RepoRecord(**dict(row)) for row in rows.fetchall()]
+
+    def start_index_run(self, repo_id: str) -> IndexRunRecord:
+        run_id = str(uuid.uuid4())
+        started_at_utc = _utc_now_iso()
+        self._conn.execute(
+            "INSERT INTO index_runs (run_id, repo_id, status, started_at_utc) VALUES (?, ?, ?, ?)",
+            (run_id, repo_id, "running", started_at_utc),
+        )
+        self._conn.commit()
+        return self.get_index_run(run_id)
+
+    def complete_index_run(self, run_id: str, *, head_commit: str) -> IndexRunRecord:
+        finished_at_utc = _utc_now_iso()
+        self._conn.execute(
+            "UPDATE index_runs SET status = ?, finished_at_utc = ?, head_commit = ? WHERE run_id = ?",
+            ("succeeded", finished_at_utc, head_commit, run_id),
+        )
+        self._conn.commit()
+        return self.get_index_run(run_id)
+
+    def fail_index_run(self, run_id: str, *, error: str) -> IndexRunRecord:
+        finished_at_utc = _utc_now_iso()
+        self._conn.execute(
+            "UPDATE index_runs SET status = ?, finished_at_utc = ?, error = ? WHERE run_id = ?",
+            ("failed", finished_at_utc, error, run_id),
+        )
+        self._conn.commit()
+        return self.get_index_run(run_id)
+
+    def get_repo(self, repo_id: str) -> RepoRecord:
+        row = self._conn.execute(
+            "SELECT repo_id, local_path, created_at_utc FROM repos WHERE repo_id = ?",
+            (repo_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Repo not found: {repo_id}")
+        return RepoRecord(**dict(row))
+
+    def get_index_run(self, run_id: str) -> IndexRunRecord:
+        row = self._conn.execute(
+            "SELECT run_id, repo_id, status, started_at_utc, finished_at_utc, error, head_commit FROM index_runs WHERE run_id = ?",
+            (run_id,),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"Index run not found: {run_id}")
+        return IndexRunRecord(**dict(row))
+
+    def get_latest_index_run_for_repo(self, repo_id: str) -> IndexRunRecord | None:
+        row = self._conn.execute(
+            """
+            SELECT run_id, repo_id, status, started_at_utc, finished_at_utc, error, head_commit
+            FROM index_runs
+            WHERE repo_id = ?
+            ORDER BY started_at_utc DESC
+            LIMIT 1
+            """,
+            (repo_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return IndexRunRecord(**dict(row))
+
+    def run_indexing_sync(self, run_id: str) -> IndexRunRecord:
+        repo = self.get_repo(self.get_index_run(run_id).repo_id)
+        repo_path = Path(repo.local_path)
+
+        try:
+            head_commit = get_head_commit(repo_path)
+        except Exception as exc:  # noqa: BLE001
+            return self.fail_index_run(run_id, error=str(exc))
+
+        return self.complete_index_run(run_id, head_commit=head_commit)
+
+    def repo_status(self, repo_id: str) -> dict[str, Any]:
+        repo = self.get_repo(repo_id)
+        latest = self.get_latest_index_run_for_repo(repo_id)
+        return {
+            "repo_id": repo.repo_id,
+            "local_path": repo.local_path,
+            "created_at_utc": repo.created_at_utc,
+            "latest_index_run": None if latest is None else {
+                "run_id": latest.run_id,
+                "status": latest.status,
+                "started_at_utc": latest.started_at_utc,
+                "finished_at_utc": latest.finished_at_utc,
+                "error": latest.error,
+                "head_commit": latest.head_commit,
+            },
+        }

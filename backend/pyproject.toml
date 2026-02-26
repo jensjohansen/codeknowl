@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codeknowl"
+version = "0.0.1"
+description = "CodeKnowl backend and CLI (Milestone 1 scaffolding)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "CodeKnowl contributors" }]
+dependencies = [
+  "blacksheep>=2.0.0",
+  "uvicorn>=0.30.0",
+  "pydantic>=2.7.0",
+]
+
+[project.scripts]
+codeknowl = "codeknowl.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
