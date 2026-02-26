@@ -101,4 +101,18 @@ def create_app(config: AppConfig | None = None) -> Application:
         except ValueError as exc:
             return Content({"error": str(exc)}, status=400)
 
+    @app.post("/repos/{repo_id}/qa/ask")
+    async def qa_ask(repo_id: str, request) -> Response:
+        payload = await request.json()
+        question = payload.get("question")
+        if not question:
+            return Content({"error": "question is required"}, status=400)
+
+        try:
+            return Content(service.qa_ask_llm(repo_id, question))
+        except KeyError:
+            return Content({"error": "repo not found"}, status=404)
+        except ValueError as exc:
+            return Content({"error": str(exc)}, status=400)
+
     return app

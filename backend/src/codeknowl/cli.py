@@ -47,6 +47,10 @@ def main() -> None:
     p_explain.add_argument("repo_id")
     p_explain.add_argument("file_path", help="Repo-relative file path")
 
+    p_ask = sub.add_parser("qa-ask", help="Ask a natural-language question (LLM + evidence bundle)")
+    p_ask.add_argument("repo_id")
+    p_ask.add_argument("question")
+
     args = parser.parse_args()
 
     service = CodeKnowlService(data_dir=Path(args.data_dir))
@@ -106,6 +110,10 @@ def main() -> None:
 
     if args.cmd == "qa-explain-file":
         _print(service.qa_explain_file_stub(args.repo_id, args.file_path))
+        return
+
+    if args.cmd == "qa-ask":
+        _print(service.qa_ask_llm(args.repo_id, args.question))
         return
 
     raise RuntimeError(f"Unhandled command: {args.cmd}")

@@ -8,7 +8,9 @@ from typing import Any
 
 from codeknowl import db
 from codeknowl.artifacts import dump_dataclasses, repo_snapshot_dir, write_json
+from codeknowl.ask import answer_with_llm
 from codeknowl.indexing import build_file_inventory, extract_symbols_and_calls
+from codeknowl.llm import LlmConfig, OpenAiCompatibleClient
 from codeknowl.query import explain_file_stub, find_callers_best_effort, load_snapshot_artifacts, where_is_symbol_defined
 from codeknowl.repo import get_head_commit
 
@@ -189,4 +191,17 @@ class CodeKnowlService:
             "head_commit": head_commit,
             "query": {"type": "explain_file_stub", "file_path": file_path},
             "result": explain_file_stub(artifacts, file_path),
+        }
+
+    def qa_ask_llm(self, repo_id: str, question: str) -> dict[str, Any]:
+        head_commit, artifacts = self._load_latest_artifacts(repo_id)
+        llm = OpenAiCompatibleClient(LlmConfig.from_env())
+        result = answer_with_llm(llm=llm, artifacts=artifacts, question=question)
+        return {
+            "repo_id": repo_id,
+            "head_commit": head_commit,
+            "query": {"type": "ask", "question": question},
+            "answer": result.answer,
+            "citations": result.citations,
+            "evidence": result.evidence,
         }
