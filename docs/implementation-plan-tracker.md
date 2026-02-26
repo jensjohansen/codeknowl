@@ -92,6 +92,11 @@ If milestone definitions drift, align the PRD first, then update this tracker.
 - Each answer includes citations to source locations (file path + line range).
 - Index state is visible for the repo (last indexed commit and last successful run time).
 
+### Quality gates / DoD checks
+- Coding standards and DoD satisfied (see `docs/CODING_STANDARDS_AND_DOD.md`).
+- CI quality gates pass for relevant components (lint, typecheck, tests).
+- Smoke/integration tests used for milestone validation are documented and runnable.
+
 ### Workstreams and work items
 
 ```mermaid
@@ -130,6 +135,12 @@ flowchart LR
   - Target date:
   - Notes:
 - [ ] Snapshot tracking for indexed commit
+  - Status: Not started
+  - Owner:
+  - Target date:
+  - Notes:
+
+- [ ] Repo off-boarding (remove repo from query scope)
   - Status: Not started
   - Owner:
   - Target date:
@@ -215,6 +226,11 @@ flowchart LR
   - navigate at least one relationship query (e.g., callers/callees/definitions) with clickable locations.
 - The IDE experience clearly indicates indexing status and failure states.
 
+### Quality gates / DoD checks
+- Coding standards and DoD satisfied (see `docs/CODING_STANDARDS_AND_DOD.md`).
+- VS Code extension passes linting, typechecking, and tests in CI.
+- Backend endpoints used by the extension are covered by smoke/integration tests.
+
 ### Workstreams and work items
 
 ```mermaid
@@ -286,6 +302,10 @@ sequenceDiagram
 - The system surfaces indexing failures and retry status in a user-visible way.
 - A user can verify that answers reflect the latest indexed commit.
 
+### Quality gates / DoD checks
+- Coding standards and DoD satisfied (see `docs/CODING_STANDARDS_AND_DOD.md`).
+- CI gates pass; incremental indexing behavior is validated with representative tests.
+
 ### Workstreams and work items
 
 #### A) Change detection
@@ -335,6 +355,11 @@ sequenceDiagram
   - indexing throughput and failures
   - system health status
 - The system meets a defined reliability target for indexing jobs over a representative time window.
+
+### Quality gates / DoD checks
+- Coding standards and DoD satisfied (see `docs/CODING_STANDARDS_AND_DOD.md`).
+- CI gates pass across components.
+- Security and access control behaviors are validated (tests + documented operator guidance).
 
 ### Workstreams and work items
 

@@ -102,7 +102,14 @@ Core workflows:
 - Run initial ingestion and indexing.
 - Verify indexing status and health.
 
-### 5.3 Continuous update workflow
+### 5.3 Repository off-boarding workflow
+
+- Remove a repository from CodeKnowl so it is no longer queryable.
+- Off-boarding must be explicit and operator-driven (no automatic removal).
+- The system must support re-adding the repository later.
+- Off-boarding must support migration scenarios (e.g., Bitbucket to GitLab, monorepo split into smaller repos) where operators replace repositories over time.
+
+### 5.4 Continuous update workflow
 
 - Detect new commits merged into the default branch.
 - Incrementally update:
@@ -139,6 +146,15 @@ sequenceDiagram
   - personal access tokens
   - SSH keys
 - Support air-gapped / offline operation except for Git access.
+
+#### 6.1.1 Repository off-boarding
+
+- Support removing a repository from the index so it is no longer queryable.
+- Off-boarding must have a clear scope and behavior:
+  - remove from active query scope and listing
+  - prevent future queries from returning results for the off-boarded repo
+  - define whether stored artifacts are deleted or retained (implementation-specific), but the behavior must be documented and operator-visible
+- Support re-onboarding a previously off-boarded repository.
 
 ### 6.2 Indexing and analysis
 
@@ -233,6 +249,10 @@ Requirements:
   - last indexed commit
   - last successful run time
   - errors and retries
+- Provide operator controls for repository lifecycle:
+  - onboard/register
+  - trigger indexing
+  - off-board/remove
 - Provide basic health endpoints and metrics.
 - Provide an operator-friendly deployment and sizing story:
   - document instance sizing guidance for common deployment sizes

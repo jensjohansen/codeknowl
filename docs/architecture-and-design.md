@@ -34,6 +34,7 @@ flowchart LR
 
 ### 2.1 In scope
 - Repository onboarding, ingestion, and indexing
+- Repository off-boarding (repository lifecycle management)
 - Structured relationship extraction and traversal-based retrieval (CPG pattern)
 - Semantic retrieval (embeddings + vector search) and optional reranking
 - Q&A experiences with citations through the IDE extension
@@ -266,6 +267,13 @@ sequenceDiagram
   API-->>U: Repo status (indexed)
 ```
 
+### 8.1.1 Repository off-boarding
+1. Operator requests off-boarding for a repository.
+2. Backend marks the repository as off-boarded (no longer queryable).
+3. Backend prevents new queries from returning results for the off-boarded repo.
+4. Backend documents and exposes whether artifacts are retained or deleted (implementation choice), and logs an audit event.
+5. The system supports re-onboarding the repository later.
+
 ### 8.2 Ask a question with citations
 1. IDE sends question + repo scope.
 2. Backend authorizes access.
@@ -314,6 +322,7 @@ flowchart TB
 - Register repo
 - Trigger index
 - Get repo status
+- Off-board repo
 
 ### 9.2 Retrieval / Q&A
 - Ask question (repo scoped)
