@@ -1,3 +1,11 @@
+"""File: backend/src/codeknowl/ask.py
+Purpose: Build best-effort evidence bundles from snapshot artifacts and (optionally) generate LLM-backed answers.
+Product/business importance: Enables Milestone 1 'ask' flows that return semi-intelligent answers grounded in citations.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+"""
+
 from __future__ import annotations
 
 import json
@@ -30,51 +38,89 @@ def _extract_identifier_candidate(question: str) -> str | None:
     return tokens[-1]
 
 
-def build_evidence_bundle(artifacts: dict[str, Any], question: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    q = question.lower()
-
-    evidence: dict[str, Any] = {"question": question, "best_effort": True}
-    citations: list[dict[str, Any]] = []
-
-    file_path = _extract_repo_path_candidate(question)
-    if file_path and any(f.get("path") == file_path for f in artifacts.get("files", [])):
-        try:
-            stub = explain_file_stub(artifacts, file_path)
-            evidence["file"] = {"path": file_path}
-            evidence["file_stub"] = stub
-            citations.extend(stub.get("citations", []))
-        except KeyError:
-            pass
-
-    if "where" in q and ("defined" in q or "definition" in q):
-        name = _extract_identifier_candidate(question)
-        if name:
-            defs = where_is_symbol_defined(artifacts, name)
-            evidence["where_defined"] = defs
-            for d in defs:
-                c = d.get("citation")
-                if c:
-                    citations.append(c)
-
-    if "call" in q:
-        name = _extract_identifier_candidate(question)
-        if name:
-            callsites = find_callers_best_effort(artifacts, name)
-            evidence["call_sites"] = callsites[:50]
-            for cs in callsites[:50]:
-                c = cs.get("citation")
-                if c:
-                    citations.append(c)
-
-    if "file_stub" not in evidence and "where_defined" not in evidence and "call_sites" not in evidence:
-        evidence["hint"] = "No specific evidence matched the question; try including a symbol name or file path."
-
+def _dedupe_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
     uniq: dict[tuple[str, int | None, int | None], dict[str, Any]] = {}
     for c in citations:
         key = (c.get("file_path"), c.get("start_line"), c.get("end_line"))
         uniq[key] = c
+    return list(uniq.values())
 
-    return evidence, list(uniq.values())
+
+def _maybe_add_file_stub(
+    artifacts: dict[str, Any], question: str, evidence: dict[str, Any], citations: list[dict[str, Any]]
+) -> None:
+    file_path = _extract_repo_path_candidate(question)
+    if not file_path:
+        return
+
+    if not any(f.get("path") == file_path for f in artifacts.get("files", [])):
+        return
+
+    try:
+        stub = explain_file_stub(artifacts, file_path)
+    except KeyError:
+        return
+
+    evidence["file"] = {"path": file_path}
+    evidence["file_stub"] = stub
+    citations.extend(stub.get("citations", []))
+
+
+def _maybe_add_where_defined(
+    artifacts: dict[str, Any], question: str, evidence: dict[str, Any], citations: list[dict[str, Any]]
+) -> None:
+    q = question.lower()
+    if "where" not in q or ("defined" not in q and "definition" not in q):
+        return
+
+    name = _extract_identifier_candidate(question)
+    if not name:
+        return
+
+    defs = where_is_symbol_defined(artifacts, name)
+    evidence["where_defined"] = defs
+    for d in defs:
+        c = d.get("citation")
+        if c:
+            citations.append(c)
+
+
+def _maybe_add_call_sites(
+    artifacts: dict[str, Any], question: str, evidence: dict[str, Any], citations: list[dict[str, Any]]
+) -> None:
+    q = question.lower()
+    if "call" not in q:
+        return
+
+    name = _extract_identifier_candidate(question)
+    if not name:
+        return
+
+    callsites = find_callers_best_effort(artifacts, name)
+    evidence["call_sites"] = callsites[:50]
+    for cs in callsites[:50]:
+        c = cs.get("citation")
+        if c:
+            citations.append(c)
+
+
+def build_evidence_bundle(artifacts: dict[str, Any], question: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Build a best-effort evidence bundle from snapshot artifacts.
+
+    This is used both for deterministic Q&A commands and as grounding for LLM-backed answers.
+    """
+
+    evidence: dict[str, Any] = {"question": question, "best_effort": True}
+    citations: list[dict[str, Any]] = []
+
+    _maybe_add_file_stub(artifacts, question, evidence, citations)
+    _maybe_add_where_defined(artifacts, question, evidence, citations)
+    _maybe_add_call_sites(artifacts, question, evidence, citations)
+
+    if "file_stub" not in evidence and "where_defined" not in evidence and "call_sites" not in evidence:
+        evidence["hint"] = "No specific evidence matched the question; try including a symbol name or file path."
+
+    return evidence, _dedupe_citations(citations)
 
 
 def answer_with_llm(
@@ -83,6 +129,7 @@ def answer_with_llm(
     artifacts: dict[str, Any],
     question: str,
 ) -> AskResult:
+    """Generate a short, evidence-grounded answer from an OpenAI-compatible LLM."""
     evidence, citations = build_evidence_bundle(artifacts, question)
 
     evidence_json = json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True)

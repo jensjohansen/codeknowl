@@ -1,3 +1,12 @@
+"""File: backend/src/codeknowl/llm.py
+Purpose: Provide a minimal OpenAI-compatible HTTP client for lemonade-server model endpoints.
+Product/business importance: Enables Milestone 1 semi-intelligent answers grounded in evidence without cloud
+dependencies.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+"""
+
 from __future__ import annotations
 
 import os

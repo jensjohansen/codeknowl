@@ -1,3 +1,10 @@
+# File: backend/pyproject.toml
+# Purpose: Define Python backend packaging, dependencies, and linting configuration.
+# Product/business importance: Provides reproducible backend builds and enforces quality gates for CodeKnowl.
+#
+# Copyright (c) 2026 John K Johansen
+# License: MIT (see LICENSE)
+
 [build-system]
 requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
@@ -19,6 +26,11 @@ dependencies = [
   "tree-sitter-languages==1.10.2",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "ruff>=0.6.0",
+]
+
 [project.scripts]
 codeknowl = "codeknowl.cli:main"
 
@@ -27,3 +39,12 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "C90"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10

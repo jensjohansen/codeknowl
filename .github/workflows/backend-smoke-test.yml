@@ -1,0 +1,31 @@
+# File: .github/workflows/backend-smoke-test.yml
+# Purpose: Run backend smoke tests on push/PR.
+# Product/business importance: Ensures changes meet coding standards and do not regress core Milestone 1 workflows.
+#
+# Copyright (c) 2026 John K Johansen
+# License: MIT (see LICENSE)
+
+name: Backend Smoke Test
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.9.5"
+
+      - name: Run backend smoke test (no-LLM)
+        env:
+          CODEKNOWL_SMOKE_REPO_PATH: ${{ github.workspace }}
+          CODEKNOWL_SMOKE_DATA_DIR: ${{ github.workspace }}/.codeknowl-ci-smoke
+        run: |
+          ./backend/scripts/smoke_test.sh

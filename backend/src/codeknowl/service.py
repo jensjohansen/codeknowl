@@ -1,3 +1,12 @@
+"""File: backend/src/codeknowl/service.py
+Purpose: Implement the backend service layer for repo registration, indexing, artifact generation, and Q&A.
+Product/business importance: This is the core orchestration layer that enables Milestone 1 indexing and
+evidence-grounded answers.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+"""
+
 from __future__ import annotations
 
 import uuid
@@ -11,7 +20,12 @@ from codeknowl.artifacts import dump_dataclasses, repo_snapshot_dir, write_json
 from codeknowl.ask import answer_with_llm
 from codeknowl.indexing import build_file_inventory, extract_symbols_and_calls
 from codeknowl.llm import LlmConfig, OpenAiCompatibleClient
-from codeknowl.query import explain_file_stub, find_callers_best_effort, load_snapshot_artifacts, where_is_symbol_defined
+from codeknowl.query import (
+    explain_file_stub,
+    find_callers_best_effort,
+    load_snapshot_artifacts,
+    where_is_symbol_defined,
+)
 from codeknowl.repo import get_head_commit
 
 
@@ -38,6 +52,8 @@ class IndexRunRecord:
 
 
 class CodeKnowlService:
+    """Core backend service for repo registration, indexing, and query handling."""
+
     def __init__(self, data_dir: Path):
         self._data_dir = data_dir
         self._conn = db.connect(data_dir)
@@ -96,7 +112,8 @@ class CodeKnowlService:
 
     def get_index_run(self, run_id: str) -> IndexRunRecord:
         row = self._conn.execute(
-            "SELECT run_id, repo_id, status, started_at_utc, finished_at_utc, error, head_commit FROM index_runs WHERE run_id = ?",
+            "SELECT run_id, repo_id, status, started_at_utc, finished_at_utc, error, head_commit "
+            "FROM index_runs WHERE run_id = ?",
             (run_id,),
         ).fetchone()
         if row is None:
@@ -146,7 +163,9 @@ class CodeKnowlService:
             "repo_id": repo.repo_id,
             "local_path": repo.local_path,
             "created_at_utc": repo.created_at_utc,
-            "latest_index_run": None if latest is None else {
+            "latest_index_run": None
+            if latest is None
+            else {
                 "run_id": latest.run_id,
                 "status": latest.status,
                 "started_at_utc": latest.started_at_utc,

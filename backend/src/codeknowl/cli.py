@@ -1,3 +1,12 @@
+"""File: backend/src/codeknowl/cli.py
+Purpose: Provide the `codeknowl` CLI for repo registration, indexing, status, and Milestone 1 Q&A commands.
+Product/business importance: Enables local-first workflows and developer/operator testing without needing an IDE
+extension.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+"""
+
 from __future__ import annotations
 
 import argparse

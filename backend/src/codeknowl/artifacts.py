@@ -1,3 +1,12 @@
+"""File: backend/src/codeknowl/artifacts.py
+Purpose: Define artifact data structures and JSON read/write helpers for indexed snapshot outputs.
+Product/business importance: Artifacts are the durable evidence boundary for citations and reproducibility in
+Milestone 1 indexing.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+"""
+
 from __future__ import annotations
 
 import json

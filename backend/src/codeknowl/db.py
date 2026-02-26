@@ -1,3 +1,12 @@
+"""File: backend/src/codeknowl/db.py
+Purpose: Provide dev-local persistence for repo registration and index run status using SQLite.
+Product/business importance: Tracks indexing state (last indexed commit/run status) required by Milestone 1
+acceptance criteria.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+"""
+
 from __future__ import annotations
 
 import sqlite3

@@ -1,3 +1,11 @@
+"""File: backend/src/codeknowl/app.py
+Purpose: Define the CodeKnowl BlackSheep ASGI application and HTTP route wiring.
+Product/business importance: This is the backend entrypoint that serves IDE and CLI-driven workflows for Milestone 1+.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -9,16 +17,13 @@ from codeknowl.config import AppConfig
 from codeknowl.service import CodeKnowlService
 
 
-def create_app(config: AppConfig | None = None) -> Application:
-    cfg = config or AppConfig.default()
-    service = CodeKnowlService(data_dir=cfg.data_dir)
-
-    app = Application()
-
+def _register_health_routes(app: Application) -> None:
     @app.get("/health")
     def health() -> Response:
         return Content({"status": "ok"})
 
+
+def _register_repo_routes(app: Application, service: CodeKnowlService) -> None:
     @app.get("/repos")
     def list_repos() -> Response:
         repos = service.list_repos()
@@ -74,6 +79,8 @@ def create_app(config: AppConfig | None = None) -> Application:
             return Content({"error": "repo not found"}, status=404)
         return Content(status)
 
+
+def _register_qa_where_defined(app: Application, service: CodeKnowlService) -> None:
     @app.get("/repos/{repo_id}/qa/where-defined")
     def qa_where_defined(repo_id: str, name: str) -> Response:
         try:
@@ -82,6 +89,9 @@ def create_app(config: AppConfig | None = None) -> Application:
             return Content({"error": "repo not found"}, status=404)
         except ValueError as exc:
             return Content({"error": str(exc)}, status=400)
+
+
+def _register_qa_what_calls(app: Application, service: CodeKnowlService) -> None:
 
     @app.get("/repos/{repo_id}/qa/what-calls")
     def qa_what_calls(repo_id: str, callee: str) -> Response:
@@ -92,6 +102,9 @@ def create_app(config: AppConfig | None = None) -> Application:
         except ValueError as exc:
             return Content({"error": str(exc)}, status=400)
 
+
+def _register_qa_explain_file(app: Application, service: CodeKnowlService) -> None:
+
     @app.get("/repos/{repo_id}/qa/explain-file")
     def qa_explain_file(repo_id: str, path: str) -> Response:
         try:
@@ -100,6 +113,9 @@ def create_app(config: AppConfig | None = None) -> Application:
             return Content({"error": str(exc)}, status=404)
         except ValueError as exc:
             return Content({"error": str(exc)}, status=400)
+
+
+def _register_qa_ask(app: Application, service: CodeKnowlService) -> None:
 
     @app.post("/repos/{repo_id}/qa/ask")
     async def qa_ask(repo_id: str, request) -> Response:
@@ -114,5 +130,24 @@ def create_app(config: AppConfig | None = None) -> Application:
             return Content({"error": "repo not found"}, status=404)
         except ValueError as exc:
             return Content({"error": str(exc)}, status=400)
+
+
+def _register_qa_routes(app: Application, service: CodeKnowlService) -> None:
+    _register_qa_where_defined(app, service)
+    _register_qa_what_calls(app, service)
+    _register_qa_explain_file(app, service)
+    _register_qa_ask(app, service)
+
+
+def create_app(config: AppConfig | None = None) -> Application:
+    """Create the BlackSheep ASGI app for CodeKnowl backend."""
+    cfg = config or AppConfig.default()
+    service = CodeKnowlService(data_dir=cfg.data_dir)
+
+    app = Application()
+
+    _register_health_routes(app)
+    _register_repo_routes(app, service)
+    _register_qa_routes(app, service)
 
     return app

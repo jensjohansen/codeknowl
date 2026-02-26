@@ -1,3 +1,12 @@
+"""File: backend/src/codeknowl/query.py
+Purpose: Implement artifact-backed query helpers for Milestone 1 Q&A (where-defined, what-calls, explain-file stub).
+Product/business importance: Provides deterministic, citation-friendly answers that reduce hallucinations and support
+traceability.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+"""
+
 from __future__ import annotations
 
 import json
