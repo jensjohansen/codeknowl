@@ -9,6 +9,7 @@ from typing import Any
 from codeknowl import db
 from codeknowl.artifacts import dump_dataclasses, repo_snapshot_dir, write_json
 from codeknowl.indexing import build_file_inventory, extract_symbols_and_calls
+from codeknowl.query import explain_file_stub, find_callers_best_effort, load_snapshot_artifacts, where_is_symbol_defined
 from codeknowl.repo import get_head_commit
 
 
@@ -151,4 +152,41 @@ class CodeKnowlService:
                 "error": latest.error,
                 "head_commit": latest.head_commit,
             },
+        }
+
+    def _get_latest_head_commit(self, repo_id: str) -> str:
+        latest = self.get_latest_index_run_for_repo(repo_id)
+        if latest is None or latest.status != "succeeded" or not latest.head_commit:
+            raise ValueError("Repo has no successful index run")
+        return latest.head_commit
+
+    def _load_latest_artifacts(self, repo_id: str) -> tuple[str, dict[str, Any]]:
+        head_commit = self._get_latest_head_commit(repo_id)
+        return head_commit, load_snapshot_artifacts(self._data_dir, repo_id, head_commit)
+
+    def qa_where_is_symbol_defined(self, repo_id: str, symbol_name: str) -> dict[str, Any]:
+        head_commit, artifacts = self._load_latest_artifacts(repo_id)
+        return {
+            "repo_id": repo_id,
+            "head_commit": head_commit,
+            "query": {"type": "where_is_symbol_defined", "symbol_name": symbol_name},
+            "results": where_is_symbol_defined(artifacts, symbol_name),
+        }
+
+    def qa_what_calls_symbol_best_effort(self, repo_id: str, callee_name: str) -> dict[str, Any]:
+        head_commit, artifacts = self._load_latest_artifacts(repo_id)
+        return {
+            "repo_id": repo_id,
+            "head_commit": head_commit,
+            "query": {"type": "what_calls_symbol", "callee_name": callee_name, "mode": "best_effort"},
+            "results": find_callers_best_effort(artifacts, callee_name),
+        }
+
+    def qa_explain_file_stub(self, repo_id: str, file_path: str) -> dict[str, Any]:
+        head_commit, artifacts = self._load_latest_artifacts(repo_id)
+        return {
+            "repo_id": repo_id,
+            "head_commit": head_commit,
+            "query": {"type": "explain_file_stub", "file_path": file_path},
+            "result": explain_file_stub(artifacts, file_path),
         }

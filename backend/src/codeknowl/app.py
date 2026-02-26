@@ -74,4 +74,31 @@ def create_app(config: AppConfig | None = None) -> Application:
             return Content({"error": "repo not found"}, status=404)
         return Content(status)
 
+    @app.get("/repos/{repo_id}/qa/where-defined")
+    def qa_where_defined(repo_id: str, name: str) -> Response:
+        try:
+            return Content(service.qa_where_is_symbol_defined(repo_id, name))
+        except KeyError:
+            return Content({"error": "repo not found"}, status=404)
+        except ValueError as exc:
+            return Content({"error": str(exc)}, status=400)
+
+    @app.get("/repos/{repo_id}/qa/what-calls")
+    def qa_what_calls(repo_id: str, callee: str) -> Response:
+        try:
+            return Content(service.qa_what_calls_symbol_best_effort(repo_id, callee))
+        except KeyError:
+            return Content({"error": "repo not found"}, status=404)
+        except ValueError as exc:
+            return Content({"error": str(exc)}, status=400)
+
+    @app.get("/repos/{repo_id}/qa/explain-file")
+    def qa_explain_file(repo_id: str, path: str) -> Response:
+        try:
+            return Content(service.qa_explain_file_stub(repo_id, path))
+        except KeyError as exc:
+            return Content({"error": str(exc)}, status=404)
+        except ValueError as exc:
+            return Content({"error": str(exc)}, status=400)
+
     return app

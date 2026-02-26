@@ -35,6 +35,18 @@ def main() -> None:
     p_status = sub.add_parser("repo-status", help="Show repo status and latest index run")
     p_status.add_argument("repo_id")
 
+    p_where = sub.add_parser("qa-where-defined", help="Where is a symbol defined? (artifact-backed)")
+    p_where.add_argument("repo_id")
+    p_where.add_argument("symbol_name")
+
+    p_calls = sub.add_parser("qa-what-calls", help="What calls a symbol? (best-effort heuristic)")
+    p_calls.add_argument("repo_id")
+    p_calls.add_argument("callee_name")
+
+    p_explain = sub.add_parser("qa-explain-file", help="Explain a file/module (deterministic stub)")
+    p_explain.add_argument("repo_id")
+    p_explain.add_argument("file_path", help="Repo-relative file path")
+
     args = parser.parse_args()
 
     service = CodeKnowlService(data_dir=Path(args.data_dir))
@@ -82,6 +94,18 @@ def main() -> None:
 
     if args.cmd == "repo-status":
         _print(service.repo_status(args.repo_id))
+        return
+
+    if args.cmd == "qa-where-defined":
+        _print(service.qa_where_is_symbol_defined(args.repo_id, args.symbol_name))
+        return
+
+    if args.cmd == "qa-what-calls":
+        _print(service.qa_what_calls_symbol_best_effort(args.repo_id, args.callee_name))
+        return
+
+    if args.cmd == "qa-explain-file":
+        _print(service.qa_explain_file_stub(args.repo_id, args.file_path))
         return
 
     raise RuntimeError(f"Unhandled command: {args.cmd}")
