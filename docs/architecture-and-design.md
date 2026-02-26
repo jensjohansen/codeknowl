@@ -226,6 +226,31 @@ flowchart LR
 - **SnapshotId**: commit hash (and optionally branch).
 - **ArtifactId**: stable ID for derived artifacts (chunks, embeddings, findings).
 
+### 7.1.1 Repository identity (operator-facing)
+CodeKnowl is repository-centric. A repository may be cloned into multiple workspaces/paths; CodeKnowl must avoid assuming a 1:1 mapping between a local checkout and a repository.
+
+Identity fields:
+- **RepoId** is the stable internal identity (a CodeKnowl-generated identifier).
+- **CanonicalRemoteUrl** is the primary operator-facing identity when available.
+- **LocalPathIdentity** is a fallback identity for local-only repositories with no remote configured.
+
+Rules:
+- Prefer identifying a repository by a canonicalized Git remote URL (e.g., `remote.origin.url`) when present.
+- If no remote URL is configured, use the fully-qualified local filesystem path as the repository identity until a remote is added.
+- Remote URLs are treated as an indicative identity, not a permanently reliable unique key:
+  - remotes can change during migrations (e.g., Bitbucket to GitLab), rewrites, or operator policy changes.
+  - CodeKnowl must not silently merge or rewrite repository identities based only on a remote URL change.
+- Forks are treated as distinct repositories by default, even if they share history or identical content at some point in time.
+
+Canonicalization and edge cases (implementation notes):
+- URL normalization must be consistent (e.g., normalize `ssh://`, SCP-like `git@host:org/repo.git`, and HTTPS forms when feasible) but should not over-normalize in ways that cause false merges.
+- Multiple remotes may exist; `origin` is a convention, not a guarantee. If multiple remotes exist, operator configuration may be required.
+- Local path identity must resolve symlinks and be explicit about case-sensitivity differences across platforms.
+- When a remote changes, CodeKnowl should:
+  - surface the change in operator-visible status,
+  - allow operators to update the canonical remote URL for the repo record, and
+  - preserve audit history.
+
 ### 7.2 Minimum stored objects
 - **Repository**: url, default branch, auth config reference, created_at.
 - **Snapshot**: repo_id, commit_hash, parent(s), indexed_at, status.
