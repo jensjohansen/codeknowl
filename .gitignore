@@ -1,0 +1,36 @@
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / TypeScript
+node_modules/
+.npm/
+.pnpm-store/
+dist/
+build/
+*.tsbuildinfo
+
+# Rust
+/target/
+
+# Go
+/bin/
+
+# Logs
+*.log
+
+# Local runtime/config
+.env
+.env.*
+*.local
