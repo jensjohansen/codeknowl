@@ -1,5 +1,9 @@
 # CodeKnowl
 
+<p align="right">
+  <img src="assets/knowl.png" alt="Knowl" width="128" />
+</p>
+
 CodeKnowl is an on-prem, local-first “codebase analyst” that ingests one or more Git repositories and provides:
 
 - A structured relationship store for code entities and relationships.
