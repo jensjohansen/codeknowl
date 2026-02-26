@@ -1,0 +1,58 @@
+{
+  "name": "codeknowl",
+  "displayName": "CodeKnowl",
+  "description": "Local-first codebase analyst for on-prem repositories.",
+  "version": "0.0.1",
+  "publisher": "codeknowl",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jensjohansen/codeknowl.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:codeknowl.ask"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codeknowl.ask",
+        "title": "CodeKnowl: Ask"
+      }
+    ],
+    "configuration": {
+      "title": "CodeKnowl",
+      "properties": {
+        "codeknowl.backendBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:8000",
+          "description": "Base URL for the CodeKnowl backend HTTP API (e.g., http://localhost:8000)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint . --ext .ts",
+    "test": "npm run compile && node ./dist/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.24",
+    "@types/vscode": "^1.85.0",
+    "@types/mocha": "^10.0.6",
+    "@typescript-eslint/eslint-plugin": "^7.3.1",
+    "@typescript-eslint/parser": "^7.3.1",
+    "@vscode/test-electron": "^2.3.9",
+    "eslint": "^8.56.0",
+    "mocha": "^10.3.0",
+    "typescript": "^5.3.3"
+  }
+}
