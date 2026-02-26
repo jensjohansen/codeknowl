@@ -1,3 +1,12 @@
+/*
+File: vscode-extension/src/extension.ts
+Purpose: VS Code extension entrypoint registering commands and wiring UI to the CodeKnowl backend.
+Product/business importance: Enables the Milestone 2 IDE experience for asking questions from within VS Code.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+*/
+
 import * as vscode from 'vscode';
 
 type AskResponse = {
@@ -67,7 +76,7 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`CodeKnowl: ${msg}`);
+      void vscode.window.showErrorMessage(`CodeKnowl: ${msg}`);
       output.appendLine('');
       output.appendLine(`[error] ${msg}`);
     }

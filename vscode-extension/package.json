@@ -53,6 +53,6 @@
     "@vscode/test-electron": "^2.3.9",
     "eslint": "^8.56.0",
     "mocha": "^10.3.0",
-    "typescript": "^5.3.3"
+    "typescript": "5.5.4"
   }
 }

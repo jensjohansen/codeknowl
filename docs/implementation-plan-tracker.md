@@ -232,10 +232,10 @@ sequenceDiagram
 
 #### A) VS Code extension shell
 - [ ] Extension scaffolding and configuration
-  - Status: Not started
+  - Status: Done
   - Owner:
   - Target date:
-  - Notes:
+  - Notes: VS Code extension scaffold added under `vscode-extension/` (TypeScript, lint, build, tests).
 - [ ] Chat UI with streaming/non-streaming rendering
   - Status: Not started
   - Owner:
@@ -258,6 +258,12 @@ sequenceDiagram
   - Owner:
   - Target date:
   - Notes:
+
+- [ ] “Ask question” command
+  - Status: Done
+  - Owner:
+  - Target date:
+  - Notes: Implemented `CodeKnowl: Ask` command calling backend `POST /qa/ask`.
 
 #### C) Citations UX
 - [ ] Render citations as clickable locations

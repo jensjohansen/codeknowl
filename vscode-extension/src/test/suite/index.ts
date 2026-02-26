@@ -1,3 +1,12 @@
+/*
+File: vscode-extension/src/test/suite/index.ts
+Purpose: Mocha test suite entrypoint used by @vscode/test-electron.
+Product/business importance: Provides automated verification for the extension MVP in CI.
+
+Copyright (c) 2026 John K Johansen
+License: MIT (see LICENSE)
+*/
+
 import * as path from 'path';
 
 import Mocha from 'mocha';

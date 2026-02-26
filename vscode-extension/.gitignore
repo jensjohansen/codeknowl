@@ -1,3 +1,10 @@
+# File: vscode-extension/.gitignore
+# Purpose: Ignore Node build artifacts and local VS Code test downloads for the extension.
+# Product/business importance: Keeps the repository clean and avoids committing large or machine-specific files.
+#
+# Copyright (c) 2026 John K Johansen
+# License: MIT (see LICENSE)
+
 node_modules/
 dist/
 .vscode-test/

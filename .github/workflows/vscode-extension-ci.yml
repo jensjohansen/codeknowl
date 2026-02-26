@@ -1,0 +1,44 @@
+# File: .github/workflows/vscode-extension-ci.yml
+# Purpose: Run VS Code extension quality gates (lint, typecheck, tests) on push/PR.
+# Product/business importance: Prevents broken IDE experiences from landing on main.
+#
+# Copyright (c) 2026 John K Johansen
+# License: MIT (see LICENSE)
+
+name: VS Code Extension CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  vscode-extension:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: vscode-extension
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: vscode-extension/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck / Compile
+        run: npm run compile
+
+      - name: Test
+        run: npm test

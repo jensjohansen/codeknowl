@@ -47,6 +47,9 @@ This document defines repository-wide coding standards and Definition of Done (D
      - why it matters to the product/business
      - copyright and license
 
+   Notes:
+   - JSON does not reliably support comments across tooling. JSON files are exempt from the per-file header requirement.
+
    Python template:
    ```python
    """
