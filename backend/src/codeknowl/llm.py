@@ -99,9 +99,9 @@ class OpenAiCompatibleClient:
         }
 
         with httpx.Client(timeout=self._config.timeout_seconds) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+            response = client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
 
         choices = data.get("choices") or []
         if not choices:
@@ -118,9 +118,9 @@ class OpenAiCompatibleClient:
 
         url = f"{self._config.base_url}{self._config.models_path}"
         with httpx.Client(timeout=self._config.timeout_seconds) as client:
-            resp = client.get(url, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
+            response = client.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
 
         models = data.get("data")
         if not isinstance(models, list):

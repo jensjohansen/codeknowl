@@ -59,9 +59,9 @@ class OpenAiCompatibleEmbeddingsClient:
         payload = {"model": self._config.model, "input": texts}
 
         with httpx.Client(timeout=self._config.timeout_seconds) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+            response = client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
 
         items = data.get("data")
         if not isinstance(items, list):

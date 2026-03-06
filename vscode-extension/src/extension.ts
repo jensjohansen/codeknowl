@@ -56,15 +56,15 @@ type RepoStatusResponse = {
 };
 
 function getBackendBaseUrl(): string {
-  const cfg = vscode.workspace.getConfiguration('codeknowl');
-  const raw = cfg.get<string>('backendBaseUrl');
-  return (raw ?? 'http://localhost:8000').replace(/\/+$/, '');
+  const configuration = vscode.workspace.getConfiguration('codeknowl');
+  const rawBaseUrl = configuration.get<string>('backendBaseUrl');
+  return (rawBaseUrl ?? 'http://localhost:8000').replace(/\/+$/, '');
 }
 
 function getBackendApiKey(): string | undefined {
-  const cfg = vscode.workspace.getConfiguration('codeknowl');
-  const raw = cfg.get<string>('apiKey');
-  const trimmed = (raw ?? '').trim();
+  const configuration = vscode.workspace.getConfiguration('codeknowl');
+  const rawApiKey = configuration.get<string>('apiKey');
+  const trimmed = (rawApiKey ?? '').trim();
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
@@ -95,8 +95,8 @@ function preferredRemoteStateKey(workspacePath: string): string {
 const execFileAsync = promisify(execFile);
 
 async function runGit(repoPath: string, args: string[]): Promise<string> {
-  const res = await execFileAsync('git', ['-C', repoPath, ...args]);
-  return (res.stdout ?? '').toString().trim();
+  const result = await execFileAsync('git', ['-C', repoPath, ...args]);
+  return (result.stdout ?? '').toString().trim();
 }
 
 async function listGitRemotes(repoPath: string): Promise<string[]> {
@@ -117,9 +117,9 @@ async function listLocalBranches(repoPath: string): Promise<string[]> {
 
 async function tryGetRemoteHeadBranch(repoPath: string, remote: string): Promise<string | undefined> {
   try {
-    const sym = await runGit(repoPath, ['symbolic-ref', '--quiet', `refs/remotes/${remote}/HEAD`]);
-    const m = sym.match(new RegExp(`^refs/remotes/${remote}/(.+)$`));
-    return m?.[1];
+    const symbolicReference = await runGit(repoPath, ['symbolic-ref', '--quiet', `refs/remotes/${remote}/HEAD`]);
+    const match = symbolicReference.match(new RegExp(`^refs/remotes/${remote}/(.+)$`));
+    return match?.[1];
   } catch {
     return undefined;
   }
@@ -136,21 +136,21 @@ async function discoverAcceptedBranch(repoPath: string, preferredRemote: string 
     return remoteDefault.trim();
   }
 
-  let locals: string[] = [];
+  let localBranches: string[] = [];
   try {
-    locals = await listLocalBranches(repoPath);
+    localBranches = await listLocalBranches(repoPath);
   } catch {
-    locals = [];
+    localBranches = [];
   }
 
-  if (locals.includes('main')) {
+  if (localBranches.includes('main')) {
     return 'main';
   }
-  if (locals.includes('master')) {
+  if (localBranches.includes('master')) {
     return 'master';
   }
-  if (locals.length > 0) {
-    return locals[0];
+  if (localBranches.length > 0) {
+    return localBranches[0];
   }
   return await getCurrentBranch(repoPath);
 }
@@ -508,17 +508,17 @@ export function activate(context: vscode.ExtensionContext): void {
       const repoId = await resolveRepoIdForWorkspace(context, baseUrl, workspacePath);
       output.appendLine(`[index] repo_id=${repoId}`);
       await updateStatusBar(statusBar, context, baseUrl, workspacePath);
-      const resp = await indexRepo(baseUrl, repoId);
-      output.appendLine(`[index] status=${resp.status}`);
-      if (resp.error) {
-        output.appendLine(`[index] error=${resp.error}`);
+      const indexResponse = await indexRepo(baseUrl, repoId);
+      output.appendLine(`[index] status=${indexResponse.status}`);
+      if (indexResponse.error) {
+        output.appendLine(`[index] error=${indexResponse.error}`);
       }
       const status = await repoStatus(baseUrl, repoId);
       const headCommit = status.latest_index_run?.head_commit;
       if (headCommit) {
         output.appendLine(`[index] head_commit=${headCommit}`);
       }
-      void vscode.window.showInformationMessage(`CodeKnowl: index ${resp.status}`);
+      void vscode.window.showInformationMessage(`CodeKnowl: index ${indexResponse.status}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       void vscode.window.showErrorMessage(`CodeKnowl: ${msg}`);
@@ -550,18 +550,18 @@ export function activate(context: vscode.ExtensionContext): void {
       const repoId = await resolveRepoIdForWorkspace(context, baseUrl, workspacePath);
       output.appendLine(`[ask] repo_id=${repoId}`);
       await updateStatusBar(statusBar, context, baseUrl, workspacePath);
-      const resp = await qaAsk(baseUrl, repoId, question);
+      const askResponse = await qaAsk(baseUrl, repoId, question);
       output.appendLine('');
-      output.appendLine(resp.answer);
+      output.appendLine(askResponse.answer);
 
-      if (resp.citations && resp.citations.length > 0) {
+      if (askResponse.citations && askResponse.citations.length > 0) {
         output.appendLine('');
         output.appendLine('Citations:');
-        for (const c of resp.citations) {
+        for (const c of askResponse.citations) {
           output.appendLine(`- ${formatCitation(c)}`);
         }
 
-        await pickAndOpenCitation(resp.citations, workspaceFolder);
+        await pickAndOpenCitation(askResponse.citations, workspaceFolder);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -589,8 +589,8 @@ export function activate(context: vscode.ExtensionContext): void {
     try {
       const repoId = await resolveRepoIdForWorkspace(context, baseUrl, workspacePath);
       await updateStatusBar(statusBar, context, baseUrl, workspacePath);
-      const resp = await qaExplainFile(baseUrl, repoId, relPath);
-      const citations = resp.citations ?? [];
+      const explainFileResponse = await qaExplainFile(baseUrl, repoId, relPath);
+      const citations = explainFileResponse.citations ?? [];
       if (citations.length === 0) {
         void vscode.window.showInformationMessage('CodeKnowl: no citations returned');
         return;
@@ -624,8 +624,8 @@ export function activate(context: vscode.ExtensionContext): void {
     try {
       const repoId = await resolveRepoIdForWorkspace(context, baseUrl, workspacePath);
       await updateStatusBar(statusBar, context, baseUrl, workspacePath);
-      const resp = await qaWhereDefined(baseUrl, repoId, name);
-      const citations = (resp.results ?? [])
+      const whereDefinedResponse = await qaWhereDefined(baseUrl, repoId, name);
+      const citations = (whereDefinedResponse.results ?? [])
         .map((r: { citation?: Citation }) => r.citation)
         .filter((c: Citation | undefined): c is Citation => Boolean(c));
       if (citations.length === 0) {
@@ -661,8 +661,8 @@ export function activate(context: vscode.ExtensionContext): void {
     try {
       const repoId = await resolveRepoIdForWorkspace(context, baseUrl, workspacePath);
       await updateStatusBar(statusBar, context, baseUrl, workspacePath);
-      const resp = await qaWhatCalls(baseUrl, repoId, name);
-      const citations = (resp.results ?? [])
+      const whatCallsResponse = await qaWhatCalls(baseUrl, repoId, name);
+      const citations = (whatCallsResponse.results ?? [])
         .map((r: { citation?: Citation }) => r.citation)
         .filter((c: Citation | undefined): c is Citation => Boolean(c));
       if (citations.length === 0) {

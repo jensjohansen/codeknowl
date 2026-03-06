@@ -557,33 +557,42 @@ class CodeKnowlService:
 
         semantic_hits: list[dict[str, Any]] = []
         try:
-            qvec = self._embeddings.embed_texts([question])[0]
-            hits = self._vector_store.search(repo_id=repo_id, head_commit=head_commit, query_vector=qvec, limit=8)
+            query_vector = self._embeddings.embed_texts([question])[0]
+            hits = self._vector_store.search(
+                repo_id=repo_id,
+                head_commit=head_commit,
+                query_vector=query_vector,
+                limit=8,
+            )
             semantic_hits = [
                 {
-                    "chunk_id": h.chunk_id,
-                    "score": h.score,
-                    "file_path": h.file_path,
-                    "start_line": h.start_line,
-                    "end_line": h.end_line,
-                    "text": h.text,
+                    "chunk_id": hit.chunk_id,
+                    "score": hit.score,
+                    "file_path": hit.file_path,
+                    "start_line": hit.start_line,
+                    "end_line": hit.end_line,
+                    "text": hit.text,
                 }
-                for h in hits
+                for hit in hits
             ]
         except Exception:  # noqa: BLE001
             semantic_hits = []
 
         if self._reranker is not None and semantic_hits:
             try:
-                docs = [str(h.get("text") or "") for h in semantic_hits]
-                scores = self._reranker.rerank(query=question, documents=docs)
+                documents = [str(semantic_hit.get("text") or "") for semantic_hit in semantic_hits]
+                scores = self._reranker.rerank(query=question, documents=documents)
                 if len(scores) == len(semantic_hits):
-                    reranked = []
-                    for h, s in zip(semantic_hits, scores, strict=True):
-                        item = dict(h)
-                        item["rerank_score"] = float(s)
-                        reranked.append(item)
-                    semantic_hits = sorted(reranked, key=lambda x: float(x.get("rerank_score") or 0.0), reverse=True)
+                    reranked_hits = []
+                    for semantic_hit, score in zip(semantic_hits, scores, strict=True):
+                        item = dict(semantic_hit)
+                        item["rerank_score"] = float(score)
+                        reranked_hits.append(item)
+                    semantic_hits = sorted(
+                        reranked_hits,
+                        key=lambda x: float(x.get("rerank_score") or 0.0),
+                        reverse=True,
+                    )
             except Exception:  # noqa: BLE001
                 pass
 

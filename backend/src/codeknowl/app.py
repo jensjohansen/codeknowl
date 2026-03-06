@@ -16,7 +16,7 @@ from blacksheep import Application, Content
 from blacksheep.messages import Response
 from blacksheep.server.normalization import ensure_response
 
-from codeknowl.audit import audit, audit_fields_from_auth_ctx, audit_fields_from_request, hash_text
+from codeknowl.audit import audit, audit_fields_from_auth_context, audit_fields_from_request, hash_text
 from codeknowl.auth import (
     GroupAuthzConfig,
     OidcConfig,
@@ -86,36 +86,45 @@ def _register_metrics_routes(app: Application) -> None:
     app.router.add_get("/metrics", metrics)
 
 
-def _get_auth_ctx(request):
+def _get_auth_context(request):
     return getattr(request, "auth", None)
 
 
-def _require_admin(request, *, group_cfg: GroupAuthzConfig) -> Response | None:
-    ctx = _get_auth_ctx(request)
-    if ctx is None:
+def _require_admin(request, *, group_config: GroupAuthzConfig) -> Response | None:
+    auth_context = _get_auth_context(request)
+    if auth_context is None:
         # Legacy API key mode: allow.
         return None
-    if is_admin(cfg=group_cfg, ctx=ctx):
+    if is_admin(group_config=group_config, auth_context=auth_context):
         return None
     return _json_response({"error": "forbidden"}, status=403)
 
 
-def _require_repo_access(request, *, group_cfg: GroupAuthzConfig, repo_id: str, op: str) -> Response | None:
-    ctx = _get_auth_ctx(request)
-    if ctx is None:
+def _require_repo_access(request, *, group_config: GroupAuthzConfig, repo_id: str, op: str) -> Response | None:
+    auth_context = _get_auth_context(request)
+    if auth_context is None:
         # Legacy API key mode: allow.
         return None
-    if is_allowed_for_repo(cfg=group_cfg, ctx=ctx, repo_id=repo_id, op=op):
+    if is_allowed_for_repo(group_config=group_config, auth_context=auth_context, repo_id=repo_id, op=op):
         return None
     return _json_response({"error": "forbidden"}, status=403)
 
 
-def _register_repo_list_routes(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
+def _register_repo_list_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
     def list_repos(request) -> Response:
         repos = service.list_repos()
-        ctx = _get_auth_ctx(request)
-        if ctx is not None:
-            repos = [r for r in repos if is_allowed_for_repo(cfg=group_cfg, ctx=ctx, repo_id=r.repo_id, op="read")]
+        auth_context = _get_auth_context(request)
+        if auth_context is not None:
+            repos = [
+                r
+                for r in repos
+                if is_allowed_for_repo(
+                    group_config=group_config,
+                    auth_context=auth_context,
+                    repo_id=r.repo_id,
+                    op="read",
+                )
+            ]
 
         return _json_response(
             [
@@ -133,15 +142,20 @@ def _register_repo_list_routes(app: Application, service: CodeKnowlService, *, g
     app.router.add_get("/repos", list_repos)
 
 
-def _register_repo_register_routes(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
+def _register_repo_register_routes(
+    app: Application,
+    service: CodeKnowlService,
+    *,
+    group_config: GroupAuthzConfig,
+) -> None:
     async def register_repo(request) -> Response:
-        forbidden = _require_admin(request, group_cfg=group_cfg)
+        forbidden = _require_admin(request, group_config=group_config)
         if forbidden is not None:
             audit().log(
                 "repos.register.forbidden",
                 fields={
                     **audit_fields_from_request(request),
-                    **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
                     "request.id": _get_request_id(request),
                 },
             )
@@ -168,7 +182,7 @@ def _register_repo_register_routes(app: Application, service: CodeKnowlService, 
             "repos.register.succeeded",
             fields={
                 **audit_fields_from_request(request),
-                **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                **audit_fields_from_auth_context(_get_auth_context(request)),
                 "request.id": _get_request_id(request),
                 "repo.id": record.repo_id,
                 "repo.accepted_branch": record.accepted_branch,
@@ -188,15 +202,15 @@ def _register_repo_register_routes(app: Application, service: CodeKnowlService, 
     app.router.add_post("/repos", register_repo)
 
 
-def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
+def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
     def index_repo(repo_id: str, request) -> Response:
-        forbidden = _require_repo_access(request, group_cfg=group_cfg, repo_id=repo_id, op="write")
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="write")
         if forbidden is not None:
             audit().log(
                 "repos.index.forbidden",
                 fields={
                     **audit_fields_from_request(request),
-                    **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
                     "request.id": _get_request_id(request),
                     "repo.id": repo_id,
                 },
@@ -220,7 +234,7 @@ def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, 
             "repos.index.completed",
             fields={
                 **audit_fields_from_request(request),
-                **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                **audit_fields_from_auth_context(_get_auth_context(request)),
                 "request.id": _get_request_id(request),
                 "repo.id": repo_id,
                 "run.id": completed.run_id,
@@ -243,15 +257,20 @@ def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, 
     app.router.add_post("/repos/{repo_id}/index", index_repo)
 
 
-def _register_repo_update_routes(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
+def _register_repo_update_routes(
+    app: Application,
+    service: CodeKnowlService,
+    *,
+    group_config: GroupAuthzConfig,
+) -> None:
     def update_repo(repo_id: str, request) -> Response:
-        forbidden = _require_repo_access(request, group_cfg=group_cfg, repo_id=repo_id, op="write")
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="write")
         if forbidden is not None:
             audit().log(
                 "repos.update.forbidden",
                 fields={
                     **audit_fields_from_request(request),
-                    **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
                     "request.id": _get_request_id(request),
                     "repo.id": repo_id,
                 },
@@ -273,7 +292,7 @@ def _register_repo_update_routes(app: Application, service: CodeKnowlService, *,
             "repos.update.completed",
             fields={
                 **audit_fields_from_request(request),
-                **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                **audit_fields_from_auth_context(_get_auth_context(request)),
                 "request.id": _get_request_id(request),
                 "repo.id": repo_id,
                 "run.id": completed.run_id,
@@ -296,9 +315,14 @@ def _register_repo_update_routes(app: Application, service: CodeKnowlService, *,
     app.router.add_post("/repos/{repo_id}/update", update_repo)
 
 
-def _register_repo_status_routes(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
+def _register_repo_status_routes(
+    app: Application,
+    service: CodeKnowlService,
+    *,
+    group_config: GroupAuthzConfig,
+) -> None:
     def repo_status(repo_id: str, request) -> Response:
-        forbidden = _require_repo_access(request, group_cfg=group_cfg, repo_id=repo_id, op="read")
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
             return forbidden
 
@@ -311,15 +335,20 @@ def _register_repo_status_routes(app: Application, service: CodeKnowlService, *,
     app.router.add_get("/repos/{repo_id}/status", repo_status)
 
 
-def _register_repo_delete_routes(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
+def _register_repo_delete_routes(
+    app: Application,
+    service: CodeKnowlService,
+    *,
+    group_config: GroupAuthzConfig,
+) -> None:
     def delete_repo(repo_id: str, request) -> Response:
-        forbidden = _require_admin(request, group_cfg=group_cfg)
+        forbidden = _require_admin(request, group_config=group_config)
         if forbidden is not None:
             audit().log(
                 "repos.delete.forbidden",
                 fields={
                     **audit_fields_from_request(request),
-                    **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
                     "request.id": _get_request_id(request),
                     "repo.id": repo_id,
                 },
@@ -335,7 +364,7 @@ def _register_repo_delete_routes(app: Application, service: CodeKnowlService, *,
             "repos.delete.succeeded",
             fields={
                 **audit_fields_from_request(request),
-                **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                **audit_fields_from_auth_context(_get_auth_context(request)),
                 "request.id": _get_request_id(request),
                 "repo.id": repo_id,
             },
@@ -345,18 +374,18 @@ def _register_repo_delete_routes(app: Application, service: CodeKnowlService, *,
     app.router.add_delete("/repos/{repo_id}", delete_repo)
 
 
-def _register_repo_routes(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
-    _register_repo_list_routes(app, service, group_cfg=group_cfg)
-    _register_repo_register_routes(app, service, group_cfg=group_cfg)
-    _register_repo_index_routes(app, service, group_cfg=group_cfg)
-    _register_repo_update_routes(app, service, group_cfg=group_cfg)
-    _register_repo_status_routes(app, service, group_cfg=group_cfg)
-    _register_repo_delete_routes(app, service, group_cfg=group_cfg)
+def _register_repo_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    _register_repo_list_routes(app, service, group_config=group_config)
+    _register_repo_register_routes(app, service, group_config=group_config)
+    _register_repo_index_routes(app, service, group_config=group_config)
+    _register_repo_update_routes(app, service, group_config=group_config)
+    _register_repo_status_routes(app, service, group_config=group_config)
+    _register_repo_delete_routes(app, service, group_config=group_config)
 
 
-def _register_qa_where_defined(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
-    def qa_where_defined(repo_id: str, name: str, request, *, group_cfg: GroupAuthzConfig) -> Response:
-        forbidden = _require_repo_access(request, group_cfg=group_cfg, repo_id=repo_id, op="read")
+def _register_qa_where_defined(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    def qa_where_defined(repo_id: str, name: str, request, *, group_config: GroupAuthzConfig) -> Response:
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
             return forbidden
 
@@ -369,20 +398,25 @@ def _register_qa_where_defined(app: Application, service: CodeKnowlService, *, g
 
     app.router.add_get(
         "/repos/{repo_id}/qa/where-defined",
-        lambda repo_id, name, request: qa_where_defined(repo_id, name, request, group_cfg=group_cfg),
+        lambda repo_id, name, request: qa_where_defined(repo_id, name, request, group_config=group_config),
     )
 
 
-def _register_qa_find_occurrences(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
+def _register_qa_find_occurrences(
+    app: Application,
+    service: CodeKnowlService,
+    *,
+    group_config: GroupAuthzConfig,
+) -> None:
     def qa_find_occurrences(
         repo_id: str,
         needle: str,
         request,
         *,
-        group_cfg: GroupAuthzConfig,
+        group_config: GroupAuthzConfig,
         max_results: int = 200,
     ) -> Response:
-        forbidden = _require_repo_access(request, group_cfg=group_cfg, repo_id=repo_id, op="read")
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
             return forbidden
 
@@ -399,15 +433,15 @@ def _register_qa_find_occurrences(app: Application, service: CodeKnowlService, *
             repo_id,
             needle,
             request,
-            group_cfg=group_cfg,
+            group_config=group_config,
             max_results=max_results,
         ),
     )
 
 
-def _register_qa_what_calls(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
-    def qa_what_calls(repo_id: str, callee: str, request, *, group_cfg: GroupAuthzConfig) -> Response:
-        forbidden = _require_repo_access(request, group_cfg=group_cfg, repo_id=repo_id, op="read")
+def _register_qa_what_calls(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    def qa_what_calls(repo_id: str, callee: str, request, *, group_config: GroupAuthzConfig) -> Response:
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
             return forbidden
 
@@ -420,13 +454,13 @@ def _register_qa_what_calls(app: Application, service: CodeKnowlService, *, grou
 
     app.router.add_get(
         "/repos/{repo_id}/qa/what-calls",
-        lambda repo_id, callee, request: qa_what_calls(repo_id, callee, request, group_cfg=group_cfg),
+        lambda repo_id, callee, request: qa_what_calls(repo_id, callee, request, group_config=group_config),
     )
 
 
-def _register_qa_explain_file(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
-    def qa_explain_file(repo_id: str, path: str, request, *, group_cfg: GroupAuthzConfig) -> Response:
-        forbidden = _require_repo_access(request, group_cfg=group_cfg, repo_id=repo_id, op="read")
+def _register_qa_explain_file(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    def qa_explain_file(repo_id: str, path: str, request, *, group_config: GroupAuthzConfig) -> Response:
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
             return forbidden
 
@@ -439,19 +473,19 @@ def _register_qa_explain_file(app: Application, service: CodeKnowlService, *, gr
 
     app.router.add_get(
         "/repos/{repo_id}/qa/explain-file",
-        lambda repo_id, path, request: qa_explain_file(repo_id, path, request, group_cfg=group_cfg),
+        lambda repo_id, path, request: qa_explain_file(repo_id, path, request, group_config=group_config),
     )
 
 
-def _register_qa_ask(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
+def _register_qa_ask(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
     async def qa_ask(repo_id: str, request) -> Response:
-        forbidden = _require_repo_access(request, group_cfg=group_cfg, repo_id=repo_id, op="read")
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
             audit().log(
                 "qa.ask.forbidden",
                 fields={
                     **audit_fields_from_request(request),
-                    **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
                     "request.id": _get_request_id(request),
                     "repo.id": repo_id,
                 },
@@ -465,7 +499,7 @@ def _register_qa_ask(app: Application, service: CodeKnowlService, *, group_cfg: 
 
         audit_fields = {
             **audit_fields_from_request(request),
-            **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+            **audit_fields_from_auth_context(_get_auth_context(request)),
             "request.id": _get_request_id(request),
             "repo.id": repo_id,
             "qa.question.sha256_16": hash_text(str(question)),
@@ -475,18 +509,18 @@ def _register_qa_ask(app: Application, service: CodeKnowlService, *, group_cfg: 
         audit().log("qa.ask.started", fields=audit_fields)
 
         try:
-            resp = service.qa_ask_llm(repo_id, question)
+            response = service.qa_ask_llm(repo_id, question)
             audit().log(
                 "qa.ask.succeeded",
                 fields={
                     **audit_fields_from_request(request),
-                    **audit_fields_from_auth_ctx(_get_auth_ctx(request)),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
                     "request.id": _get_request_id(request),
                     "repo.id": repo_id,
                     "qa.question.sha256_16": hash_text(str(question)),
                 },
             )
-            return _json_response(resp)
+            return _json_response(response)
         except KeyError:
             return _json_response({"error": "repo not found"}, status=404)
         except ValueError as exc:
@@ -495,15 +529,19 @@ def _register_qa_ask(app: Application, service: CodeKnowlService, *, group_cfg: 
     app.router.add_post("/repos/{repo_id}/qa/ask", qa_ask)
 
 
-def _register_qa_routes(app: Application, service: CodeKnowlService, *, group_cfg: GroupAuthzConfig) -> None:
-    _register_qa_where_defined(app, service, group_cfg=group_cfg)
-    _register_qa_what_calls(app, service, group_cfg=group_cfg)
-    _register_qa_explain_file(app, service, group_cfg=group_cfg)
-    _register_qa_find_occurrences(app, service, group_cfg=group_cfg)
-    _register_qa_ask(app, service, group_cfg=group_cfg)
+def _register_qa_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    _register_qa_where_defined(app, service, group_config=group_config)
+    _register_qa_what_calls(app, service, group_config=group_config)
+    _register_qa_explain_file(app, service, group_config=group_config)
+    _register_qa_find_occurrences(app, service, group_config=group_config)
+    _register_qa_ask(app, service, group_config=group_config)
 
 
-def _maybe_get_oidc_ctx(request, *, oidc_verifier: OidcVerifier | None) -> tuple[object | None, Response | None]:
+def _maybe_get_oidc_auth_context(
+    request,
+    *,
+    oidc_verifier: OidcVerifier | None,
+) -> tuple[object | None, Response | None]:
     if oidc_verifier is None:
         return None, None
 
@@ -545,7 +583,7 @@ def _make_auth_middleware(*, api_key: str | None, oidc_verifier: OidcVerifier | 
         if path in {"/health", "/metrics"}:
             return ensure_response(await handler(request))
 
-        ctx, unauthorized = _maybe_get_oidc_ctx(request, oidc_verifier=oidc_verifier)
+        auth_context, unauthorized = _maybe_get_oidc_auth_context(request, oidc_verifier=oidc_verifier)
         if unauthorized is not None:
             audit().log(
                 "http.unauthorized",
@@ -556,7 +594,7 @@ def _make_auth_middleware(*, api_key: str | None, oidc_verifier: OidcVerifier | 
             )
             return unauthorized
 
-        if ctx is None and api_key and not _is_api_key_allowed(request, api_key=api_key):
+        if auth_context is None and api_key and not _is_api_key_allowed(request, api_key=api_key):
             audit().log(
                 "http.unauthorized",
                 fields={
@@ -566,7 +604,7 @@ def _make_auth_middleware(*, api_key: str | None, oidc_verifier: OidcVerifier | 
             )
             return _json_response({"error": "unauthorized"}, status=401)
 
-        if ctx is None and not api_key:
+        if auth_context is None and not api_key:
             audit().log(
                 "http.unauthorized",
                 fields={
@@ -576,7 +614,7 @@ def _make_auth_middleware(*, api_key: str | None, oidc_verifier: OidcVerifier | 
             )
             return _json_response({"error": "unauthorized"}, status=401)
 
-        request.auth = ctx
+        request.auth = auth_context
         return ensure_response(await handler(request))
 
     return auth_middleware
@@ -584,26 +622,26 @@ def _make_auth_middleware(*, api_key: str | None, oidc_verifier: OidcVerifier | 
 
 def _configure_auth(app: Application):
     api_key = os.environ.get("CODEKNOWL_API_KEY")
-    oidc_cfg = OidcConfig.from_env(os.environ)
-    group_cfg = GroupAuthzConfig.from_env(os.environ)
-    oidc_verifier = OidcVerifier(cfg=oidc_cfg) if oidc_cfg else None
+    oidc_config = OidcConfig.from_env(os.environ)
+    group_config = GroupAuthzConfig.from_env(os.environ)
+    oidc_verifier = OidcVerifier(config=oidc_config) if oidc_config else None
 
     auth_enabled = bool(api_key) or (oidc_verifier is not None)
 
     if auth_enabled:
         app.middlewares.append(_make_auth_middleware(api_key=api_key, oidc_verifier=oidc_verifier))
 
-    return auth_enabled, group_cfg
+    return auth_enabled, group_config
 
 
 def create_app(config: AppConfig | None = None) -> Application:
     """Create the BlackSheep ASGI app for CodeKnowl backend."""
-    cfg = config or AppConfig.default()
-    service = CodeKnowlService(data_dir=cfg.data_dir)
+    configuration = config or AppConfig.default()
+    service = CodeKnowlService(data_dir=configuration.data_dir)
 
     app = Application()
 
-    auth_enabled, group_cfg = _configure_auth(app)
+    auth_enabled, group_config = _configure_auth(app)
 
     poll_raw = os.environ.get("CODEKNOWL_POLL_INTERVAL_SECONDS")
     interval: int | None = None
@@ -615,11 +653,11 @@ def create_app(config: AppConfig | None = None) -> Application:
         if interval <= 0:
             interval = None
         else:
-            start_repo_poller(data_dir=cfg.data_dir, interval_seconds=interval)
+            start_repo_poller(data_dir=configuration.data_dir, interval_seconds=interval)
 
     _register_health_routes(app, service, auth_enabled=auth_enabled, poll_interval_seconds=interval)
     _register_metrics_routes(app)
-    _register_repo_routes(app, service, group_cfg=group_cfg)
-    _register_qa_routes(app, service, group_cfg=group_cfg)
+    _register_repo_routes(app, service, group_config=group_config)
+    _register_qa_routes(app, service, group_config=group_config)
 
     return app

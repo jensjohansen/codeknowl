@@ -82,9 +82,9 @@ class OpenAiCompatibleReranker:
             payload["top_n"] = top_n
 
         with httpx.Client(timeout=self._config.timeout_seconds) as client:
-            resp = client.post(url, headers=headers, json=payload)
-            resp.raise_for_status()
-            data = resp.json()
+            response = client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
 
         scores = data.get("scores")
         if not isinstance(scores, list):
@@ -109,27 +109,27 @@ class OverlapReranker:
         if not documents:
             return []
 
-        q = self._tokenize(query)
-        if not q:
+        query_tokens = self._tokenize(query)
+        if not query_tokens:
             return [0.0 for _ in documents]
 
         scores: list[float] = []
         for doc in documents:
-            d = self._tokenize(doc)
-            if not d:
+            document_tokens = self._tokenize(doc)
+            if not document_tokens:
                 scores.append(0.0)
                 continue
-            scores.append(float(len(q & d)) / float(len(q)))
+            scores.append(float(len(query_tokens & document_tokens)) / float(len(query_tokens)))
 
         return scores
 
 
 def reranker_from_env() -> Reranker | None:
-    cfg = RerankerConfig.from_env()
-    if cfg.mode in {"", "none", "off", "disabled"}:
+    configuration = RerankerConfig.from_env()
+    if configuration.mode in {"", "none", "off", "disabled"}:
         return None
-    if cfg.mode in {"overlap", "deterministic"}:
+    if configuration.mode in {"overlap", "deterministic"}:
         return OverlapReranker()
-    if cfg.mode == "http":
+    if configuration.mode == "http":
         return OpenAiCompatibleReranker(HttpRerankerConfig.from_env())
-    raise ValueError(f"Unsupported reranker mode: {cfg.mode}")
+    raise ValueError(f"Unsupported reranker mode: {configuration.mode}")

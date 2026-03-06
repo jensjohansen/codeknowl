@@ -82,15 +82,15 @@ class TestHttpAuthz(unittest.IsolatedAsyncioTestCase):
                 client = TestClient(app)
 
                 # No bearer token => 401
-                resp = await client.get("/repos")
-                self.assertEqual(resp.status, 401)
+                response = await client.get("/repos")
+                self.assertEqual(response.status, 401)
 
                 # Admin can register a repo.
                 current_groups = {"/codeknowl/admin"}
                 repo_path = Path(self._tmp.name) / "repo"
                 repo_path.mkdir(parents=True, exist_ok=True)
 
-                resp = await client.post(
+                response = await client.post(
                     "/repos",
                     headers={"authorization": "Bearer admin"},
                     content=JSONContent(
@@ -101,30 +101,30 @@ class TestHttpAuthz(unittest.IsolatedAsyncioTestCase):
                         }
                     ),
                 )
-                self.assertEqual(resp.status, 201)
-                payload = json.loads((await resp.read() or b"{}").decode("utf-8"))
+                self.assertEqual(response.status, 201)
+                payload = json.loads((await response.read() or b"{}").decode("utf-8"))
                 repo_id = payload["repo_id"]
 
                 # Non-admin cannot delete.
                 current_groups = set()
-                resp = await client.delete(f"/repos/{repo_id}", headers={"authorization": "Bearer none"})
-                self.assertEqual(resp.status, 403)
+                response = await client.delete(f"/repos/{repo_id}", headers={"authorization": "Bearer none"})
+                self.assertEqual(response.status, 403)
 
                 # Read-only group cannot update.
                 current_groups = {f"/codeknowl/repos/{repo_id}/read"}
-                resp = await client.post(
+                response = await client.post(
                     f"/repos/{repo_id}/update",
                     headers={"authorization": "Bearer read"},
                 )
-                self.assertEqual(resp.status, 403)
+                self.assertEqual(response.status, 403)
 
                 # Write group can update.
                 current_groups = {f"/codeknowl/repos/{repo_id}/write"}
-                resp = await client.post(
+                response = await client.post(
                     f"/repos/{repo_id}/update",
                     headers={"authorization": "Bearer write"},
                 )
-                self.assertEqual(resp.status, 200)
+                self.assertEqual(response.status, 200)
             finally:
                 await app.stop()
 

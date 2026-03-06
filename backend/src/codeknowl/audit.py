@@ -78,8 +78,8 @@ class AuditConfig:
 
 
 class AuditLogger:
-    def __init__(self, cfg: AuditConfig):
-        self._cfg = cfg
+    def __init__(self, config: AuditConfig):
+        self._config = config
         self._logger = logging.getLogger("codeknowl.audit")
         self._logger.setLevel(logging.INFO)
         self._logger.propagate = False
@@ -87,8 +87,8 @@ class AuditLogger:
         if self._logger.handlers:
             return
 
-        if cfg.sink == "file":
-            path = cfg.file_path or (Path(".codeknowl") / "audit.log")
+        if config.sink == "file":
+            path = config.file_path or (Path(".codeknowl") / "audit.log")
             path.parent.mkdir(parents=True, exist_ok=True)
             handler: logging.Handler = logging.FileHandler(path, encoding="utf-8")
         else:
@@ -98,16 +98,16 @@ class AuditLogger:
         self._logger.addHandler(handler)
 
     def enabled(self) -> bool:
-        return self._cfg.enabled
+        return self._config.enabled
 
     def include_query_text(self) -> bool:
-        return self._cfg.include_query_text
+        return self._config.include_query_text
 
     def new_request_id(self) -> str:
         return str(uuid.uuid4())
 
     def log(self, event: str, *, fields: dict[str, Any] | None = None) -> None:
-        if not self._cfg.enabled:
+        if not self._config.enabled:
             return
 
         payload: dict[str, Any] = {
@@ -140,18 +140,20 @@ def audit_fields_from_request(request) -> dict[str, Any]:
     headers = getattr(request, "headers", None)
 
     user_agent = None
-    xff = None
+    x_forwarded_for = None
     if headers is not None:
         try:
-            ua = headers.get_first(b"user-agent")
-            user_agent = ua.decode("utf-8", errors="replace") if ua else None
+            user_agent_header = headers.get_first(b"user-agent")
+            user_agent = user_agent_header.decode("utf-8", errors="replace") if user_agent_header else None
         except Exception:  # noqa: BLE001
             user_agent = None
         try:
-            raw = headers.get_first(b"x-forwarded-for")
-            xff = raw.decode("utf-8", errors="replace") if raw else None
+            forwarded_for_header = headers.get_first(b"x-forwarded-for")
+            x_forwarded_for = (
+                forwarded_for_header.decode("utf-8", errors="replace") if forwarded_for_header else None
+            )
         except Exception:  # noqa: BLE001
-            xff = None
+            x_forwarded_for = None
 
     path = _safe_str(getattr(request, "path", None), max_len=512)
     method = _safe_str(getattr(request, "method", None), max_len=16)
@@ -160,20 +162,20 @@ def audit_fields_from_request(request) -> dict[str, Any]:
         "http.method": method,
         "http.path": path,
         "http.user_agent": _safe_str(user_agent, max_len=256),
-        "http.x_forwarded_for": _safe_str(xff, max_len=256),
+        "http.x_forwarded_for": _safe_str(x_forwarded_for, max_len=256),
     }
 
 
-def audit_fields_from_auth_ctx(auth_ctx: object | None) -> dict[str, Any]:
-    if auth_ctx is None:
+def audit_fields_from_auth_context(auth_context: object | None) -> dict[str, Any]:
+    if auth_context is None:
         return {
             "auth.subject": None,
             "auth.username": None,
             "auth.mode": "api_key_or_anonymous",
         }
 
-    subject = _safe_str(getattr(auth_ctx, "subject", None), max_len=128)
-    username = _safe_str(getattr(auth_ctx, "username", None), max_len=128)
+    subject = _safe_str(getattr(auth_context, "subject", None), max_len=128)
+    username = _safe_str(getattr(auth_context, "username", None), max_len=128)
     return {
         "auth.subject": subject,
         "auth.username": username,

@@ -77,23 +77,23 @@ class QdrantConfig:
 
 
 class QdrantVectorStore:
-    def __init__(self, cfg: QdrantConfig):
-        self._cfg = cfg
+    def __init__(self, config: QdrantConfig):
+        self._config = config
 
     def _headers(self) -> dict[str, str]:
         headers: dict[str, str] = {"Content-Type": "application/json"}
-        if self._cfg.api_key:
-            headers["api-key"] = self._cfg.api_key
+        if self._config.api_key:
+            headers["api-key"] = self._config.api_key
         return headers
 
     def _ensure_collection(self, dim: int) -> None:
-        url = f"{self._cfg.base_url}/collections/{self._cfg.collection}"
-        with httpx.Client(timeout=self._cfg.timeout_seconds) as client:
-            resp = client.get(url, headers=self._headers())
-            if resp.status_code == 200:
+        url = f"{self._config.base_url}/collections/{self._config.collection}"
+        with httpx.Client(timeout=self._config.timeout_seconds) as client:
+            response = client.get(url, headers=self._headers())
+            if response.status_code == 200:
                 return
-            if resp.status_code != 404:
-                resp.raise_for_status()
+            if response.status_code != 404:
+                response.raise_for_status()
 
             payload = {
                 "vectors": {"size": dim, "distance": "Cosine"},
@@ -110,33 +110,33 @@ class QdrantVectorStore:
         self._ensure_collection(dim=len(vectors[0]))
 
         points = []
-        for c, v in zip(chunks, vectors, strict=True):
+        for chunk_record, vector in zip(chunks, vectors, strict=True):
             points.append(
                 {
-                    "id": c.chunk_id,
-                    "vector": v,
+                    "id": chunk_record.chunk_id,
+                    "vector": vector,
                     "payload": {
                         "repo_id": repo_id,
-                        "file_path": c.file_path,
-                        "start_line": c.start_line,
-                        "end_line": c.end_line,
-                        "text": c.text,
+                        "file_path": chunk_record.file_path,
+                        "start_line": chunk_record.start_line,
+                        "end_line": chunk_record.end_line,
+                        "text": chunk_record.text,
                     },
                 }
             )
 
-        url = f"{self._cfg.base_url}/collections/{self._cfg.collection}/points?wait=true"
-        with httpx.Client(timeout=self._cfg.timeout_seconds) as client:
-            resp = client.put(url, headers=self._headers(), json={"points": points})
-            resp.raise_for_status()
+        url = f"{self._config.base_url}/collections/{self._config.collection}/points?wait=true"
+        with httpx.Client(timeout=self._config.timeout_seconds) as client:
+            response = client.put(url, headers=self._headers(), json={"points": points})
+            response.raise_for_status()
 
     def delete_by_file_paths(self, *, repo_id: str, file_paths: list[str]) -> None:
         if not file_paths:
             return
 
-        url = f"{self._cfg.base_url}/collections/{self._cfg.collection}/points/delete?wait=true"
-        with httpx.Client(timeout=self._cfg.timeout_seconds) as client:
-            resp = client.post(
+        url = f"{self._config.base_url}/collections/{self._config.collection}/points/delete?wait=true"
+        with httpx.Client(timeout=self._config.timeout_seconds) as client:
+            response = client.post(
                 url,
                 headers=self._headers(),
                 json={
@@ -148,12 +148,12 @@ class QdrantVectorStore:
                     }
                 },
             )
-            resp.raise_for_status()
+            response.raise_for_status()
 
     def search(self, *, repo_id: str, head_commit: str, query_vector: list[float], limit: int = 8) -> list[SemanticHit]:
-        url = f"{self._cfg.base_url}/collections/{self._cfg.collection}/points/search"
-        with httpx.Client(timeout=self._cfg.timeout_seconds) as client:
-            resp = client.post(
+        url = f"{self._config.base_url}/collections/{self._config.collection}/points/search"
+        with httpx.Client(timeout=self._config.timeout_seconds) as client:
+            response = client.post(
                 url,
                 headers=self._headers(),
                 json={
@@ -167,8 +167,8 @@ class QdrantVectorStore:
                     },
                 },
             )
-            resp.raise_for_status()
-            data = resp.json()
+            response.raise_for_status()
+            data = response.json()
 
         result = data.get("result")
         if not isinstance(result, list):
@@ -294,9 +294,9 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 def vector_store_from_env(*, data_dir: Path) -> VectorStore:
-    cfg = VectorStoreConfig.from_env()
-    if cfg.mode == "file":
+    configuration = VectorStoreConfig.from_env()
+    if configuration.mode == "file":
         return FileVectorStore(data_dir)
-    if cfg.mode == "qdrant":
+    if configuration.mode == "qdrant":
         return QdrantVectorStore(QdrantConfig.from_env())
-    raise ValueError(f"Unsupported vector store mode: {cfg.mode}")
+    raise ValueError(f"Unsupported vector store mode: {configuration.mode}")

@@ -69,11 +69,11 @@ class OidcVerifier:
     def __init__(
         self,
         *,
-        cfg: OidcConfig,
+        config: OidcConfig,
         http_timeout_seconds: float = 5.0,
         cache_ttl_seconds: float = 300.0,
     ):
-        self._cfg = cfg
+        self._config = config
         self._http_timeout_seconds = http_timeout_seconds
         self._cache_ttl_seconds = cache_ttl_seconds
 
@@ -87,9 +87,9 @@ class OidcVerifier:
         return time.time()
 
     def _http_get_json(self, url: str) -> dict[str, Any]:
-        resp = httpx.get(url, timeout=self._http_timeout_seconds)
-        resp.raise_for_status()
-        data = resp.json()
+        response = httpx.get(url, timeout=self._http_timeout_seconds)
+        response.raise_for_status()
+        data = response.json()
         if not isinstance(data, dict):
             raise ValueError(f"unexpected JSON from {url}")
         return data
@@ -102,10 +102,10 @@ class OidcVerifier:
         ):
             return self._discovery
 
-        doc = self._http_get_json(f"{self._cfg.issuer_url}/.well-known/openid-configuration")
-        self._discovery = doc
+        discovery_document = self._http_get_json(f"{self._config.issuer_url}/.well-known/openid-configuration")
+        self._discovery = discovery_document
         self._discovery_cached_at = self._now()
-        return doc
+        return discovery_document
 
     def _get_jwks(self) -> dict[str, Any]:
         if self._jwks and self._jwks_cached_at and (self._now() - self._jwks_cached_at) < self._cache_ttl_seconds:
@@ -148,7 +148,7 @@ class OidcVerifier:
         options = {
             "verify_signature": True,
             "verify_exp": True,
-            "verify_aud": self._cfg.audience is not None,
+            "verify_aud": self._config.audience is not None,
             "verify_iss": True,
         }
 
@@ -157,8 +157,8 @@ class OidcVerifier:
                 token,
                 key=public_key,
                 algorithms=["RS256"],
-                audience=self._cfg.audience,
-                issuer=self._cfg.issuer_url,
+                audience=self._config.audience,
+                issuer=self._config.issuer_url,
                 options=options,
             )
         except Exception as exc:  # noqa: BLE001
@@ -168,7 +168,7 @@ class OidcVerifier:
             raise ValueError("invalid token")
         return claims
 
-    def _claims_to_ctx(self, claims: dict[str, Any]) -> AuthContext:
+    def _claims_to_auth_context(self, claims: dict[str, Any]) -> AuthContext:
         sub = claims.get("sub")
         if not isinstance(sub, str) or not sub:
             raise ValueError("token missing sub")
@@ -200,7 +200,7 @@ class OidcVerifier:
         jwk = self._get_jwk_for_kid(kid=kid)
         public_key = jwt.algorithms.RSAAlgorithm.from_jwk(jwk)
         claims = self._decode_and_validate(token, public_key=public_key)
-        return self._claims_to_ctx(claims)
+        return self._claims_to_auth_context(claims)
 
 
 def parse_bearer_token(authz_header: str | None) -> str | None:
@@ -215,17 +215,17 @@ def parse_bearer_token(authz_header: str | None) -> str | None:
     return token or None
 
 
-def group_for_repo(*, cfg: GroupAuthzConfig, repo_id: str, op: str) -> str:
-    suffix = cfg.read_suffix if op == "read" else cfg.write_suffix
-    return f"{cfg.group_prefix}/{repo_id}/{suffix}"
+def group_for_repo(*, group_config: GroupAuthzConfig, repo_id: str, op: str) -> str:
+    suffix = group_config.read_suffix if op == "read" else group_config.write_suffix
+    return f"{group_config.group_prefix}/{repo_id}/{suffix}"
 
 
-def is_admin(*, cfg: GroupAuthzConfig, ctx: AuthContext) -> bool:
-    return cfg.admin_group in ctx.groups
+def is_admin(*, group_config: GroupAuthzConfig, auth_context: AuthContext) -> bool:
+    return group_config.admin_group in auth_context.groups
 
 
-def is_allowed_for_repo(*, cfg: GroupAuthzConfig, ctx: AuthContext, repo_id: str, op: str) -> bool:
-    if is_admin(cfg=cfg, ctx=ctx):
+def is_allowed_for_repo(*, group_config: GroupAuthzConfig, auth_context: AuthContext, repo_id: str, op: str) -> bool:
+    if is_admin(group_config=group_config, auth_context=auth_context):
         return True
-    expected = group_for_repo(cfg=cfg, repo_id=repo_id, op=op)
-    return expected in ctx.groups
+    expected = group_for_repo(group_config=group_config, repo_id=repo_id, op=op)
+    return expected in auth_context.groups
