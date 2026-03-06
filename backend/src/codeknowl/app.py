@@ -32,11 +32,21 @@ from codeknowl.service import CodeKnowlService
 
 
 def _json_response(data: object, *, status: int = 200) -> Response:
+    """Serialize data to JSON and return a starlette Response.
+
+    Why this exists:
+    - HTTP endpoints need a consistent way to return JSON responses.
+    """
     payload = pyjson.dumps(data, ensure_ascii=False).encode("utf-8")
     return Response(status, None, Content(b"application/json", payload))
 
 
 def _get_request_id(request) -> str | None:
+    """Extract the request_id from the request object.
+
+    Why this exists:
+    - Audit logging needs to correlate logs with a request identifier.
+    """
     return getattr(request, "request_id", None)
 
 
@@ -47,6 +57,11 @@ def _register_health_routes(
     auth_enabled: bool,
     poll_interval_seconds: int | None,
 ) -> None:
+    """Register health check endpoints.
+
+    Why this exists:
+    - Monitoring and load balancers need a health endpoint.
+    """
     def health() -> Response:
         return _json_response(
             {
@@ -63,6 +78,11 @@ def _register_health_routes(
 
 
 def _register_metrics_routes(app: Application) -> None:
+    """Register metrics endpoint for counters and derived success rates.
+
+    Why this exists:
+    - Observability dashboards need a metrics endpoint.
+    """
     def metrics() -> Response:
         counters = METRICS.snapshot()
         index_attempt = counters.get("http.repos.index.attempt", 0)
@@ -101,6 +121,11 @@ def _require_admin(request, *, group_config: GroupAuthzConfig) -> Response | Non
 
 
 def _require_repo_access(request, *, group_config: GroupAuthzConfig, repo_id: str, op: str) -> Response | None:
+    """Enforce repo-scoped access control; return 403 if forbidden.
+
+    Why this exists:
+    - Repo routes must ensure the user has permission for the specific repo and operation.
+    """
     auth_context = _get_auth_context(request)
     if auth_context is None:
         # Legacy API key mode: allow.
@@ -111,6 +136,11 @@ def _require_repo_access(request, *, group_config: GroupAuthzConfig, repo_id: st
 
 
 def _register_repo_list_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register repo listing routes with optional RBAC filtering.
+
+    Why this exists:
+    - The IDE needs to list repos the user can access.
+    """
     def list_repos(request) -> Response:
         repos = service.list_repos()
         auth_context = _get_auth_context(request)
@@ -148,6 +178,11 @@ def _register_repo_register_routes(
     *,
     group_config: GroupAuthzConfig,
 ) -> None:
+    """Register repo registration route (admin-only).
+
+    Why this exists:
+    - The IDE needs to register new repositories for indexing.
+    """
     async def register_repo(request) -> Response:
         forbidden = _require_admin(request, group_config=group_config)
         if forbidden is not None:
@@ -203,6 +238,11 @@ def _register_repo_register_routes(
 
 
 def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register repo indexing route (write access required).
+
+    Why this exists:
+    - The IDE needs to trigger (re)indexing of a repository.
+    """
     def index_repo(repo_id: str, request) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="write")
         if forbidden is not None:
@@ -253,7 +293,6 @@ def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, 
                 "head_commit": completed.head_commit,
             }
         )
-
     app.router.add_post("/repos/{repo_id}/index", index_repo)
 
 
@@ -263,6 +302,11 @@ def _register_repo_update_routes(
     *,
     group_config: GroupAuthzConfig,
 ) -> None:
+    """Register repo update route (write access required).
+
+    Why this exists:
+    - The IDE needs to trigger accepted-code-first updates.
+    """
     def update_repo(repo_id: str, request) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="write")
         if forbidden is not None:
@@ -321,6 +365,11 @@ def _register_repo_status_routes(
     *,
     group_config: GroupAuthzConfig,
 ) -> None:
+    """Register repo status route (read access required).
+
+    Why this exists:
+    - The IDE needs to display indexing and metadata status.
+    """
     def repo_status(repo_id: str, request) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
@@ -341,6 +390,11 @@ def _register_repo_delete_routes(
     *,
     group_config: GroupAuthzConfig,
 ) -> None:
+    """Register repo deletion route (admin-only).
+
+    Why this exists:
+    - The IDE needs to offboard repositories.
+    """
     def delete_repo(repo_id: str, request) -> Response:
         forbidden = _require_admin(request, group_config=group_config)
         if forbidden is not None:
@@ -375,6 +429,11 @@ def _register_repo_delete_routes(
 
 
 def _register_repo_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register all repo-related routes.
+
+    Why this exists:
+    - Centralizes route registration for the repo API.
+    """
     _register_repo_list_routes(app, service, group_config=group_config)
     _register_repo_register_routes(app, service, group_config=group_config)
     _register_repo_index_routes(app, service, group_config=group_config)
@@ -384,6 +443,11 @@ def _register_repo_routes(app: Application, service: CodeKnowlService, *, group_
 
 
 def _register_qa_where_defined(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register QA where-defined endpoint.
+
+    Why this exists:
+    - The IDE needs deterministic symbol definition answers.
+    """
     def qa_where_defined(repo_id: str, name: str, request, *, group_config: GroupAuthzConfig) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
@@ -408,6 +472,11 @@ def _register_qa_find_occurrences(
     *,
     group_config: GroupAuthzConfig,
 ) -> None:
+    """Register QA find-occurrences endpoint.
+
+    Why this exists:
+    - The IDE needs to locate all occurrences of a string in a repo.
+    """
     def qa_find_occurrences(
         repo_id: str,
         needle: str,
@@ -440,6 +509,11 @@ def _register_qa_find_occurrences(
 
 
 def _register_qa_what_calls(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register QA what-calls endpoint.
+
+    Why this exists:
+    - The IDE needs to find all callers of a symbol.
+    """
     def qa_what_calls(repo_id: str, callee: str, request, *, group_config: GroupAuthzConfig) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
@@ -459,6 +533,11 @@ def _register_qa_what_calls(app: Application, service: CodeKnowlService, *, grou
 
 
 def _register_qa_explain_file(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register QA explain-file endpoint.
+
+    Why this exists:
+    - The IDE needs a deterministic file summary without using an LLM.
+    """
     def qa_explain_file(repo_id: str, path: str, request, *, group_config: GroupAuthzConfig) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
@@ -478,6 +557,11 @@ def _register_qa_explain_file(app: Application, service: CodeKnowlService, *, gr
 
 
 def _register_qa_ask(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register QA ask endpoint (LLM-backed answers).
+
+    Why this exists:
+    - The IDE needs to ask natural language questions with LLM-generated answers.
+    """
     async def qa_ask(repo_id: str, request) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
         if forbidden is not None:
@@ -530,6 +614,11 @@ def _register_qa_ask(app: Application, service: CodeKnowlService, *, group_confi
 
 
 def _register_qa_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register all QA routes.
+
+    Why this exists:
+    - Centralizes route registration for the QA API.
+    """
     _register_qa_where_defined(app, service, group_config=group_config)
     _register_qa_what_calls(app, service, group_config=group_config)
     _register_qa_explain_file(app, service, group_config=group_config)
@@ -542,9 +631,11 @@ def _maybe_get_oidc_auth_context(
     *,
     oidc_verifier: OidcVerifier | None,
 ) -> tuple[object | None, Response | None]:
-    if oidc_verifier is None:
-        return None, None
+    """Extract and validate OIDC bearer token if present.
 
+    Why this exists:
+    - Enforces OIDC authentication when enabled.
+    """
     authz = None
     try:
         authz = request.headers.get_first(b"authorization")
@@ -553,7 +644,7 @@ def _maybe_get_oidc_auth_context(
 
     bearer = parse_bearer_token(authz.decode("utf-8", errors="replace") if authz else None)
     if not bearer:
-        return None, None
+        return None, _json_response({"error": "unauthorized"}, status=401)
 
     try:
         return oidc_verifier.verify_bearer_token(bearer), None
@@ -562,6 +653,11 @@ def _maybe_get_oidc_auth_context(
 
 
 def _is_api_key_allowed(request, *, api_key: str | None) -> bool:
+    """Check if an API key is allowed via environment allowlist.
+
+    Why this exists:
+    - Provides a simple API key allowlist for legacy/automation use.
+    """
     if not api_key:
         return False
 
@@ -621,6 +717,11 @@ def _make_auth_middleware(*, api_key: str | None, oidc_verifier: OidcVerifier | 
 
 
 def _configure_auth(app: Application):
+    """Configure authentication and authorization from environment.
+
+    Why this exists:
+    - Enables OIDC and optional API key authentication.
+    """
     api_key = os.environ.get("CODEKNOWL_API_KEY")
     oidc_config = OidcConfig.from_env(os.environ)
     group_config = GroupAuthzConfig.from_env(os.environ)
@@ -635,7 +736,11 @@ def _configure_auth(app: Application):
 
 
 def create_app(config: AppConfig | None = None) -> Application:
-    """Create the BlackSheep ASGI app for CodeKnowl backend."""
+    """Create the BlackSheep ASGI app for CodeKnowl backend.
+
+    Why this exists:
+    - Centralizes app creation and route registration.
+    """
     configuration = config or AppConfig.default()
     service = CodeKnowlService(data_dir=configuration.data_dir)
 
