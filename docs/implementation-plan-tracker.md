@@ -569,15 +569,15 @@ Milestone status: Done
 
 ## Milestone 6 — Observability stack alignment
 
-Milestone status: Not started
+Milestone status: Done
 
 ### Definition of Done (PRD acceptance criteria)
 - Metrics and logs are exportable/consumable by Loki + Prometheus/Grafana.
 - Operator runbook documents how to observe indexing throughput, failures, and job lag.
 
 ### Work items
-- [ ] ITD-18 Observability stack alignment (Loki + Prometheus/Grafana)
-  - Status: Not started
+- [x] ITD-18 Observability stack alignment (Loki + Prometheus/Grafana)
+  - Status: Done
   - Owner:
   - Target date:
   - Notes: Align logs/metrics export to Prometheus scrape format and add operator dashboard guidance.
