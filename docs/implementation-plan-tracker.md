@@ -586,14 +586,14 @@ Milestone status: Done
 
 ## Milestone 7 — Graph relationship store (NebulaGraph)
 
-Milestone status: Not started
+Milestone status: Done
 
 ### Definition of Done (PRD acceptance criteria)
 - Structured entities/edges are persisted in the graph store and queryable for relationship navigation.
 
 ### Work items
-- [ ] ITD-05 NebulaGraph integration (graph storage + queries)
-  - Status: Not started
+- [x] ITD-05 NebulaGraph integration (graph storage + queries)
+  - Status: Done
   - Owner:
   - Target date:
   - Notes: ITD-05 is marked Completed (tech choice) but the backend currently uses JSON artifacts for structured relationships. Add NebulaGraph schema, ingestion, and query layer.
