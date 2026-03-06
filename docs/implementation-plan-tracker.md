@@ -552,15 +552,15 @@ Milestone status: Done
 
 ## Milestone 5 — Durable job queue + workers
 
-Milestone status: Not started
+Milestone status: Done
 
 ### Definition of Done (PRD acceptance criteria)
 - Indexing and update operations run asynchronously via a worker queue and are retryable.
 - Job status and failure reasons are visible to operators.
 
 ### Work items
-- [ ] ITD-14 Job queue + workers (Arq)
-  - Status: Not started
+- [x] ITD-14 Job queue + workers (Arq)
+  - Status: Done
   - Owner:
   - Target date:
   - Notes: Move indexing/update workloads to async jobs with retries and durable state; keep sync endpoints as thin job enqueuers.

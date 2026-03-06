@@ -34,6 +34,7 @@ from codeknowl.config import AppConfig
 from codeknowl.metrics import METRICS
 from codeknowl.poller import start_repo_poller
 from codeknowl.service import CodeKnowlService
+from codeknowl.structured_logging import setup_structured_logging
 
 
 def _json_response(data: object, *, status: int = 200) -> Response:
@@ -83,30 +84,14 @@ def _register_health_routes(
 
 
 def _register_metrics_routes(app: Application) -> None:
-    """Register metrics endpoint for counters and derived success rates.
+    """Register Prometheus metrics endpoint.
 
     Why this exists:
-    - Observability dashboards need a metrics endpoint.
+    - Observability dashboards need Prometheus-compatible metrics.
     """
     def metrics() -> Response:
-        counters = METRICS.snapshot()
-        index_attempt = counters.get("http.repos.index.attempt", 0)
-        index_succeeded = counters.get("http.repos.index.succeeded", 0)
-        update_attempt = counters.get("http.repos.update.attempt", 0)
-        update_succeeded = counters.get("http.repos.update.succeeded", 0)
-
-        index_success_rate = (index_succeeded / index_attempt) if index_attempt else None
-        update_success_rate = (update_succeeded / update_attempt) if update_attempt else None
-
-        return _json_response(
-            {
-                "counters": counters,
-                "derived": {
-                    "http.repos.index.success_rate": index_success_rate,
-                    "http.repos.update.success_rate": update_success_rate,
-                },
-            }
-        )
+        content_type, data = METRICS.export()
+        return Response(200, None, Content(content_type.encode(), data))
 
     app.router.add_get("/metrics", metrics)
 
@@ -242,13 +227,13 @@ def _register_repo_register_routes(
     app.router.add_post("/repos", register_repo)
 
 
-def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+def _register_repo_index_routes(app: Application, service, *, group_config: GroupAuthzConfig) -> None:
     """Register repo indexing route (write access required).
 
     Why this exists:
     - The IDE needs to trigger (re)indexing of a repository.
     """
-    def index_repo(repo_id: str, request) -> Response:
+    async def index_repo(repo_id: str, request) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="write")
         if forbidden is not None:
             audit().log(
@@ -262,40 +247,33 @@ def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, 
             )
             return forbidden
 
-        METRICS.inc("http.repos.index.attempt")
+        METRICS.inc_http_request("POST", "/repos/{repo_id}/index", 200)
         try:
             service.get_repo(repo_id)
         except KeyError:
-            METRICS.inc("http.repos.index.not_found")
+            METRICS.inc_http_request("POST", "/repos/{repo_id}/index", 404)
             return _json_response({"error": "repo not found"}, status=404)
-        run = service.start_index_run(repo_id)
-        completed = service.run_indexing_sync(run.run_id)
-        if completed.status == "succeeded":
-            METRICS.inc("http.repos.index.succeeded")
-        else:
-            METRICS.inc("http.repos.index.failed")
+        
+        # Enqueue async job instead of running synchronously
+        job_id = await service.enqueue_index_job(repo_id)
+        METRICS.inc_job_queued("index")
+        METRICS.inc_http_request("POST", "/repos/{repo_id}/index", 202)
 
         audit().log(
-            "repos.index.completed",
+            "repos.index.queued",
             fields={
                 **audit_fields_from_request(request),
                 **audit_fields_from_auth_context(_get_auth_context(request)),
                 "request.id": _get_request_id(request),
                 "repo.id": repo_id,
-                "run.id": completed.run_id,
-                "run.status": completed.status,
-                "run.head_commit": completed.head_commit,
+                "job.id": job_id,
             },
         )
         return _json_response(
             {
-                "run_id": completed.run_id,
-                "repo_id": completed.repo_id,
-                "status": completed.status,
-                "started_at_utc": completed.started_at_utc,
-                "finished_at_utc": completed.finished_at_utc,
-                "error": completed.error,
-                "head_commit": completed.head_commit,
+                "status": "queued",
+                "job_id": job_id,
+                "repo_id": repo_id,
             }
         )
     app.router.add_post("/repos/{repo_id}/index", index_repo)
@@ -326,16 +304,17 @@ def _register_repo_update_routes(
             )
             return forbidden
 
-        METRICS.inc("http.repos.update.attempt")
+        METRICS.inc_http_request("POST", "/repos/{repo_id}/update", 200)
         try:
             service.get_repo(repo_id)
         except KeyError:
-            METRICS.inc("http.repos.update.not_found")
+            METRICS.inc_http_request("POST", "/repos/{repo_id}/update", 404)
             return _json_response({"error": "repo not found"}, status=404)
         
         # Enqueue async job instead of running synchronously
         job_id = await service.enqueue_update_job(repo_id)
-        METRICS.inc("http.repos.update.queued")
+        METRICS.inc_job_queued("update")
+        METRICS.inc_http_request("POST", "/repos/{repo_id}/update", 202)
         
         audit().log(
             "repos.update.queued",
@@ -740,6 +719,9 @@ async def create_app(config: AppConfig | None = None) -> Application:
     - Centralizes app creation and route registration.
     """
     configuration = config or AppConfig.default()
+    
+    # Setup structured logging
+    setup_structured_logging()
     
     # Create async service with job queue
     async_service = await create_async_service(configuration.data_dir)
