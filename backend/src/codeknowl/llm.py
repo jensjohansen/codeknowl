@@ -17,6 +17,12 @@ import httpx
 
 @dataclass(frozen=True)
 class LlmConfig:
+    """Connection and model settings for an OpenAI-compatible LLM endpoint.
+
+    Why this exists:
+    - Operators need to configure endpoint, model, auth, and paths via environment.
+    """
+
     base_url: str
     model: str
     api_key: str | None
@@ -26,6 +32,11 @@ class LlmConfig:
 
     @staticmethod
     def from_env(prefix: str = "CODEKNOWL_LLM_") -> "LlmConfig":
+        """Load LLM configuration from environment variables.
+
+        Why this exists:
+        - The backend should be configurable via environment without code changes.
+        """
         base_url = os.environ.get(f"{prefix}BASE_URL", "").rstrip("/")
         model = os.environ.get(f"{prefix}MODEL", "")
         api_key = os.environ.get(f"{prefix}API_KEY")
@@ -47,6 +58,11 @@ class LlmConfig:
 
     @staticmethod
     def try_from_env(prefix: str = "CODEKNOWL_LLM_") -> "LlmConfig | None":
+        """Load LLM configuration from environment variables, returning None if incomplete.
+
+        Why this exists:
+        - The backend should be able to run without an LLM for deterministic-only QA.
+        """
         base_url = os.environ.get(f"{prefix}BASE_URL", "").strip()
         model = os.environ.get(f"{prefix}MODEL", "").strip()
         if not base_url or not model:
@@ -56,19 +72,27 @@ class LlmConfig:
 
 @dataclass(frozen=True)
 class LlmProfiles:
+    """Three LLM configurations for multi-profile QA synthesis.
+
+    Why this exists:
+    - Multi-model QA uses distinct profiles: coding, general, and synthesizer.
+    """
+
     coding: LlmConfig
     general: LlmConfig
     synth: LlmConfig
 
     @staticmethod
     def from_env() -> "LlmProfiles | None":
-        """Loads the three LLM roles used for QA synthesis.
+        """Load the three LLM roles used for QA synthesis.
 
         Backward compatible behavior:
         - If role-specific env vars are not present, fall back to CODEKNOWL_LLM_*.
         - If SYNTH is not configured, defaults to GENERAL.
-        """
 
+        Why this exists:
+        - Operators can configure three distinct models while maintaining backward compatibility.
+        """
         default = LlmConfig.try_from_env(prefix="CODEKNOWL_LLM_")
         if default is None:
             return None
@@ -80,10 +104,21 @@ class LlmProfiles:
 
 
 class OpenAiCompatibleClient:
+    """HTTP client for OpenAI-compatible chat completions and model listing.
+
+    Why this exists:
+    - The backend needs to communicate with lemonade-server or similar endpoints using the OpenAI API format.
+    """
+
     def __init__(self, config: LlmConfig):
         self._config = config
 
     def chat(self, *, system: str, user: str) -> str:
+        """Send a chat completion request and return the assistant’s message.
+
+        Why this exists:
+        - QA synthesis needs to send system/user prompts and extract the assistant’s response.
+        """
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"
@@ -112,6 +147,11 @@ class OpenAiCompatibleClient:
         return message
 
     def list_models(self) -> list[dict[str, object]]:
+        """List available models from the endpoint.
+
+        Why this exists:
+        - Operators and health checks need to verify that the LLM endpoint is reachable and serving models.
+        """
         headers: dict[str, str] = {"Content-Type": "application/json"}
         if self._config.api_key:
             headers["Authorization"] = f"Bearer {self._config.api_key}"

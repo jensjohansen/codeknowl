@@ -22,6 +22,12 @@ from codeknowl.chunking import ChunkRecord
 
 @dataclass(frozen=True)
 class SemanticHit:
+    """Represents a single semantic search result with citation metadata.
+
+    Why this exists:
+    - Callers need a stable structure to render search results with file/line citations and scores.
+    """
+
     chunk_id: str
     score: float
     file_path: str
@@ -31,30 +37,69 @@ class SemanticHit:
 
 
 class VectorStore(Protocol):
+    """Protocol for pluggable semantic storage backends.
+
+    Why this exists:
+    - The service layer needs to swap implementations (Qdrant for prod, FileVectorStore for local eval) without
+      changing application code.
+    """
+
     def upsert(self, *, repo_id: str, head_commit: str, chunks: list[ChunkRecord], vectors: list[list[float]]) -> None:
+        """Store or update chunks with vectors for a repository snapshot.
+
+        Why this exists:
+        - Indexing must persist embeddings so they can be retrieved at query time.
+        """
         raise NotImplementedError
 
     def delete_by_file_paths(self, *, repo_id: str, file_paths: list[str]) -> None:
+        """Remove vectors for specific file paths.
+
+        Why this exists:
+        - Incremental updates need to delete stale vectors before re-indexing changed files.
+        """
         raise NotImplementedError
 
     def search(
         self, *, repo_id: str, head_commit: str, query_vector: list[float], limit: int = 8
     ) -> list[SemanticHit]:
+        """Retrieve the most similar chunks for a query vector.
+
+        Why this exists:
+        - QA and IDE workflows need to retrieve evidence chunks to ground answers.
+        """
         raise NotImplementedError
 
 
 @dataclass(frozen=True)
 class VectorStoreConfig:
+    """Selects which vector store implementation to use.
+
+    Why this exists:
+    - Operators need a single environment variable to switch between Qdrant and file-based backends.
+    """
+
     mode: str
 
     @staticmethod
     def from_env(prefix: str = "CODEKNOWL_VECTOR_") -> "VectorStoreConfig":
+        """Load configuration from environment variables.
+
+        Why this exists:
+        - The backend should be configurable via environment without code changes.
+        """
         mode = os.environ.get(f"{prefix}MODE", "qdrant").strip().lower()
         return VectorStoreConfig(mode=mode)
 
 
 @dataclass(frozen=True)
 class QdrantConfig:
+    """Connection and collection settings for Qdrant.
+
+    Why this exists:
+    - Operators need to configure endpoint, auth, collection, and timeouts via environment.
+    """
+
     base_url: str
     api_key: str | None
     collection: str
@@ -62,6 +107,11 @@ class QdrantConfig:
 
     @staticmethod
     def from_env(prefix: str = "CODEKNOWL_QDRANT_") -> "QdrantConfig":
+        """Load Qdrant configuration from environment variables.
+
+        Why this exists:
+        - The backend should be configurable via environment without code changes.
+        """
         base_url = os.environ.get(f"{prefix}BASE_URL", "").rstrip("/")
         if not base_url:
             raise ValueError(f"Missing {prefix}BASE_URL")
@@ -77,6 +127,12 @@ class QdrantConfig:
 
 
 class QdrantVectorStore:
+    """Qdrant-backed implementation of VectorStore.
+
+    Why this exists:
+    - Production deployments need a scalable, searchable vector store with metadata filtering.
+    """
+
     def __init__(self, config: QdrantConfig):
         self._config = config
 
@@ -102,6 +158,11 @@ class QdrantVectorStore:
             create.raise_for_status()
 
     def upsert(self, *, repo_id: str, head_commit: str, chunks: list[ChunkRecord], vectors: list[list[float]]) -> None:
+        """Store or update chunks with vectors in Qdrant.
+
+        Why this exists:
+        - Indexing must persist embeddings so they can be retrieved at query time.
+        """
         if not chunks:
             return
         if len(chunks) != len(vectors):
@@ -131,6 +192,11 @@ class QdrantVectorStore:
             response.raise_for_status()
 
     def delete_by_file_paths(self, *, repo_id: str, file_paths: list[str]) -> None:
+        """Remove vectors for specific file paths in Qdrant.
+
+        Why this exists:
+        - Incremental updates need to delete stale vectors before re-indexing changed files.
+        """
         if not file_paths:
             return
 
@@ -151,6 +217,11 @@ class QdrantVectorStore:
             response.raise_for_status()
 
     def search(self, *, repo_id: str, head_commit: str, query_vector: list[float], limit: int = 8) -> list[SemanticHit]:
+        """Retrieve the most similar chunks for a query vector from Qdrant.
+
+        Why this exists:
+        - QA and IDE workflows need to retrieve evidence chunks to ground answers.
+        """
         url = f"{self._config.base_url}/collections/{self._config.collection}/points/search"
         with httpx.Client(timeout=self._config.timeout_seconds) as client:
             response = client.post(
@@ -193,6 +264,12 @@ class QdrantVectorStore:
 
 
 class FileVectorStore:
+    """Local file-based fallback implementation of VectorStore.
+
+    Why this exists:
+    - Enables local development and OSS evaluation without requiring an external vector database.
+    """
+
     def __init__(self, data_dir: Path):
         self._root = data_dir / "vector_store"
         self._root.mkdir(parents=True, exist_ok=True)
@@ -201,6 +278,11 @@ class FileVectorStore:
         return self._root / f"{repo_id}.jsonl"
 
     def upsert(self, *, repo_id: str, head_commit: str, chunks: list[ChunkRecord], vectors: list[list[float]]) -> None:
+        """Store or update chunks with vectors in a local JSONL file.
+
+        Why this exists:
+        - Indexing must persist embeddings locally so they can be retrieved at query time.
+        """
         if not chunks:
             return
         if len(chunks) != len(vectors):
@@ -225,6 +307,11 @@ class FileVectorStore:
                 f.write("\n")
 
     def delete_by_file_paths(self, *, repo_id: str, file_paths: list[str]) -> None:
+        """Remove vectors for specific file paths from the local JSONL file.
+
+        Why this exists:
+        - Incremental updates need to delete stale vectors before re-indexing changed files.
+        """
         if not file_paths:
             return
         file_paths_set = set(file_paths)
@@ -236,6 +323,11 @@ class FileVectorStore:
                 f.write("\n")
 
     def search(self, *, repo_id: str, head_commit: str, query_vector: list[float], limit: int = 8) -> list[SemanticHit]:
+        """Retrieve the most similar chunks for a query vector from the local JSONL file.
+
+        Why this exists:
+        - QA and IDE workflows need to retrieve evidence chunks to ground answers.
+        """
         scored: list[tuple[float, dict[str, Any]]] = []
         for rec in self._load(repo_id):
             vec = rec.get("vector")
@@ -294,6 +386,11 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 def vector_store_from_env(*, data_dir: Path) -> VectorStore:
+    """Construct a VectorStore implementation from environment variables.
+
+    Why this exists:
+    - The backend should be configurable via environment without code changes.
+    """
     configuration = VectorStoreConfig.from_env()
     if configuration.mode == "file":
         return FileVectorStore(data_dir)

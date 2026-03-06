@@ -16,6 +16,12 @@ from typing import Any
 
 @dataclass(frozen=True)
 class ChunkRecord:
+    """A chunk of text with stable identifiers for citations.
+
+    Why this exists:
+    - Semantic indexing and QA need stable, citation-friendly chunks with file/line metadata.
+    """
+
     chunk_id: str
     file_path: str
     start_line: int
@@ -24,10 +30,20 @@ class ChunkRecord:
 
 
 def dump_chunks(chunks: list[ChunkRecord]) -> list[dict[str, Any]]:
+    """Serialize chunks to JSON-serializable dicts.
+
+    Why this exists:
+    - Chunk JSON artifacts need a simple way to serialize ChunkRecord instances.
+    """
     return [asdict(c) for c in chunks]
 
 
 def _hash_chunk_id(*, repo_id: str, file_path: str, start_line: int, end_line: int) -> str:
+    """Generate a stable, unique identifier for a chunk.
+
+    Why this exists:
+    - Chunks need stable IDs that can be referenced by vector store entries and citations.
+    """
     raw = f"{repo_id}:{file_path}:{start_line}:{end_line}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()
 
@@ -41,6 +57,11 @@ def chunk_file_text(
     max_lines: int = 200,
     overlap_lines: int = 20,
 ) -> list[ChunkRecord]:
+    """Split a file’s text into overlapping, line-based chunks.
+
+    Why this exists:
+    - Semantic indexing needs reasonably sized chunks that preserve context across boundaries.
+    """
     lines = text.splitlines()
     if not lines:
         return []
@@ -92,6 +113,11 @@ def chunk_repo_files(
     file_paths: list[str],
     max_bytes_per_file: int = 512_000,
 ) -> list[ChunkRecord]:
+    """Chunk a list of repo files, skipping very large files.
+
+    Why this exists:
+    - Indexing needs to chunk many files while avoiding memory pressure from huge files.
+    """
     chunks: list[ChunkRecord] = []
 
     for rel in file_paths:

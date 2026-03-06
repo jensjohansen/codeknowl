@@ -21,10 +21,22 @@ def _ensure_column(conn: sqlite3.Connection, *, table: str, column: str, ddl_fra
 
 
 def get_db_path(data_dir: Path) -> Path:
+    """Return the filesystem path to the SQLite database file.
+
+    Why this exists:
+    - Callers need a single, consistent location for dev-local persistence so repo registration and indexing status
+      can be resumed across process restarts.
+    """
     return data_dir / "codeknowl.db"
 
 
 def connect(data_dir: Path) -> sqlite3.Connection:
+    """Open a SQLite connection for the backend's local-first state.
+
+    Why this exists:
+    - The backend needs a lightweight persistence layer for MVP milestones without requiring a separate database.
+    - Callers use this to ensure the data directory exists and to get a connection configured for row access.
+    """
     data_dir.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(get_db_path(data_dir))
     conn.row_factory = sqlite3.Row
@@ -32,6 +44,12 @@ def connect(data_dir: Path) -> sqlite3.Connection:
 
 
 def init_schema(conn: sqlite3.Connection) -> None:
+    """Create required tables and apply forward-only schema changes.
+
+    Why this exists:
+    - The backend must be able to start cleanly on a new machine and evolve the dev-local schema without manual
+      operator steps.
+    """
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS repos (

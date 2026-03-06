@@ -53,10 +53,20 @@ def _should_ignore_path(path: Path) -> bool:
 
 
 def should_ignore_path(path: Path) -> bool:
+    """Return True if a path should be excluded from indexing.
+
+    Why this exists:
+    - Indexing must ignore build artifacts, dependencies, and CodeKnowl’s own state.
+    """
     return _should_ignore_path(path)
 
 
 def _range_from_node(node) -> SourceRange:
+    """Convert a tree-sitter node’s range to our SourceRange (1-based lines).
+
+    Why this exists:
+    - Artifacts need 1-based line numbers for citations and IDE display.
+    """
     start = node.start_point  # (row, column), 0-based
     end = node.end_point
     return SourceRange(
@@ -68,10 +78,20 @@ def _range_from_node(node) -> SourceRange:
 
 
 def _file_language(path: Path) -> str:
+    """Map a file extension to a language identifier.
+
+    Why this exists:
+    - File records need a language field for downstream filtering and tooling.
+    """
     return _EXT_LANGUAGE.get(path.suffix.lower(), "unknown")
 
 
 def build_file_inventory(repo_path: Path) -> list[FileRecord]:
+    """List all files in a repo, excluding ignored paths.
+
+    Why this exists:
+    - Indexing needs a complete file inventory with metadata (path, language, size).
+    """
     records: list[FileRecord] = []
     for p in repo_path.rglob("*"):
         if not p.is_file():
@@ -91,6 +111,11 @@ def build_file_inventory(repo_path: Path) -> list[FileRecord]:
 
 
 def build_file_records_for_paths(repo_path: Path, rel_paths: set[str]) -> list[FileRecord]:
+    """Build FileRecords for a specific set of relative paths.
+
+    Why this exists:
+    - Incremental updates need to build records only for changed files.
+    """
     records: list[FileRecord] = []
     for rel in sorted(rel_paths):
         p = repo_path / rel
@@ -107,11 +132,21 @@ def build_file_records_for_paths(repo_path: Path, rel_paths: set[str]) -> list[F
 
 
 def _stable_symbol_id(repo_rel_path: str, kind: str, name: str, start_line: int) -> str:
+    """Generate a stable, unique identifier for a symbol.
+
+    Why this exists:
+    - Symbol records need stable IDs that can be referenced by call records.
+    """
     raw = f"{repo_rel_path}:{kind}:{name}:{start_line}".encode("utf-8")
     return hashlib.sha256(raw).hexdigest()[:24]
 
 
 def _add_python_symbols(symbols: list[SymbolRecord], *, node, code_bytes: bytes, rel_path: str) -> None:
+    """Extract Python function/class definitions.
+
+    Why this exists:
+    - Python indexing needs to capture top-level definitions for navigation and QA.
+    """
     if node.type not in {"function_definition", "class_definition"}:
         return
 
@@ -207,9 +242,10 @@ def _walk_tree(root) -> list:
 
 
 def extract_symbols_and_calls(repo_path: Path) -> tuple[list[SymbolRecord], list[CallRecord]]:
-    """Extract a minimal set of symbol definitions and call sites.
+    """Extract symbols and call sites from all supported files in a repo.
 
-    This is a best-effort MVP extractor driven by Tree-sitter.
+    Why this exists:
+    - Indexing needs to populate the symbols and calls JSON artifacts for a snapshot.
     """
     symbols: list[SymbolRecord] = []
     calls: list[CallRecord] = []
@@ -252,6 +288,11 @@ def extract_symbols_and_calls(repo_path: Path) -> tuple[list[SymbolRecord], list
 def extract_symbols_and_calls_for_paths(
     repo_path: Path, rel_paths: set[str]
 ) -> tuple[list[SymbolRecord], list[CallRecord]]:
+    """Extract symbols and call sites for a specific set of relative paths.
+
+    Why this exists:
+    - Incremental updates need to extract symbols/calls only for changed files.
+    """
     symbols: list[SymbolRecord] = []
     calls: list[CallRecord] = []
 

@@ -17,6 +17,12 @@ import httpx
 
 @dataclass(frozen=True)
 class EmbeddingsConfig:
+    """Connection and model settings for an OpenAI-compatible embeddings endpoint.
+
+    Why this exists:
+    - Operators need to configure endpoint, model, auth, and paths via environment.
+    """
+
     base_url: str
     model: str
     api_key: str | None
@@ -25,6 +31,11 @@ class EmbeddingsConfig:
 
     @staticmethod
     def from_env(prefix: str = "CODEKNOWL_EMBED_") -> "EmbeddingsConfig":
+        """Load embeddings configuration from environment variables.
+
+        Why this exists:
+        - The backend should be configurable via environment without code changes.
+        """
         base_url = os.environ.get(f"{prefix}BASE_URL", "").rstrip("/")
         model = os.environ.get(f"{prefix}MODEL", "")
         api_key = os.environ.get(f"{prefix}API_KEY")
@@ -44,10 +55,21 @@ class EmbeddingsConfig:
 
 
 class OpenAiCompatibleEmbeddingsClient:
+    """HTTP client for OpenAI-compatible embeddings endpoints.
+
+    Why this exists:
+    - The backend needs to generate embeddings for semantic indexing using an external service.
+    """
+
     def __init__(self, config: EmbeddingsConfig):
         self._config = config
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """Generate embeddings for a list of texts.
+
+        Why this exists:
+        - Indexing needs to turn chunks into vectors for storage and later retrieval.
+        """
         if not texts:
             return []
 
@@ -83,10 +105,21 @@ class OpenAiCompatibleEmbeddingsClient:
 
 
 class HashEmbeddingsClient:
+    """Deterministic, no-network fallback embeddings client.
+
+    Why this exists:
+    - Enables local development and OSS evaluation without requiring an external embeddings service.
+    """
+
     def __init__(self, *, dim: int = 384):
         self._dim = dim
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        """Generate deterministic hash-based embeddings for texts.
+
+        Why this exists:
+        - Provides a reproducible fallback when HTTP embeddings are unavailable.
+        """
         if not texts:
             return []
 
@@ -102,6 +135,11 @@ class HashEmbeddingsClient:
 
 
 def embeddings_client_from_env() -> OpenAiCompatibleEmbeddingsClient | HashEmbeddingsClient:
+    """Construct an embeddings client from environment variables.
+
+    Why this exists:
+    - The backend should be configurable via environment without code changes.
+    """
     mode = os.environ.get("CODEKNOWL_EMBED_MODE", "http").strip().lower()
     if mode == "hash":
         dim = int(os.environ.get("CODEKNOWL_EMBED_HASH_DIM", "384"))

@@ -19,6 +19,12 @@ import jwt
 
 @dataclass(frozen=True)
 class AuthContext:
+    """Immutable authentication context extracted from a verified token.
+
+    Why this exists:
+    - Request handlers and audit logging need a stable, minimal representation of the caller’s identity and groups.
+    """
+
     subject: str
     username: str | None
     groups: set[str]
@@ -26,11 +32,22 @@ class AuthContext:
 
 @dataclass(frozen=True)
 class OidcConfig:
+    """OIDC issuer and audience configuration.
+
+    Why this exists:
+    - Operators need to configure the OIDC provider and optional audience without code changes.
+    """
+
     issuer_url: str
     audience: str | None
 
     @staticmethod
     def from_env(env: dict[str, str]) -> "OidcConfig | None":
+        """Load OIDC configuration from environment variables.
+
+        Why this exists:
+        - The backend should be configurable via environment without code changes.
+        """
         mode = env.get("CODEKNOWL_AUTH_MODE", "").strip().lower()
         if mode not in {"oidc", "keycloak"}:
             return None
@@ -46,6 +63,12 @@ class OidcConfig:
 
 @dataclass(frozen=True)
 class GroupAuthzConfig:
+    """Group-based authorization mapping for repos and admin.
+
+    Why this exists:
+    - Operators need to configure group naming patterns and admin groups via environment.
+    """
+
     group_prefix: str
     read_suffix: str
     write_suffix: str
@@ -53,6 +76,11 @@ class GroupAuthzConfig:
 
     @staticmethod
     def from_env(env: dict[str, str]) -> "GroupAuthzConfig":
+        """Load group authorization configuration from environment variables.
+
+        Why this exists:
+        - The backend should be configurable via environment without code changes.
+        """
         prefix = env.get("CODEKNOWL_AUTHZ_GROUP_PREFIX", "/codeknowl/repos").strip().rstrip("/")
         read_suffix = env.get("CODEKNOWL_AUTHZ_READ_SUFFIX", "read").strip().strip("/")
         write_suffix = env.get("CODEKNOWL_AUTHZ_WRITE_SUFFIX", "write").strip().strip("/")
@@ -66,6 +94,13 @@ class GroupAuthzConfig:
 
 
 class OidcVerifier:
+    """OIDC token verifier with caching and JWKS rotation support.
+
+    Why this exists:
+    - The API server needs to validate JWTs using the provider’s JWKS with reasonable caching to avoid
+      unnecessary network calls.
+    """
+
     def __init__(
         self,
         *,
@@ -188,6 +223,12 @@ class OidcVerifier:
         return AuthContext(subject=sub, username=username, groups=groups)
 
     def verify_bearer_token(self, token: str) -> AuthContext:
+        """Validate a JWT bearer token and return an AuthContext.
+
+        Why this exists:
+        - The API server needs to turn incoming Authorization: Bearer tokens into a stable AuthContext for
+          authorization and audit logging.
+        """
         try:
             header = jwt.get_unverified_header(token)
         except Exception as exc:  # noqa: BLE001
@@ -204,6 +245,11 @@ class OidcVerifier:
 
 
 def parse_bearer_token(authz_header: str | None) -> str | None:
+    """Extract the token from an Authorization: Bearer header.
+
+    Why this exists:
+    - Middleware needs to parse the Authorization header consistently across request handling.
+    """
     if not authz_header:
         return None
     raw = authz_header.strip()
@@ -216,15 +262,30 @@ def parse_bearer_token(authz_header: str | None) -> str | None:
 
 
 def group_for_repo(*, group_config: GroupAuthzConfig, repo_id: str, op: str) -> str:
+    """Compute the expected group name for a repo operation.
+
+    Why this exists:
+    - Authorization checks need to map repo+op to a group name consistently.
+    """
     suffix = group_config.read_suffix if op == "read" else group_config.write_suffix
     return f"{group_config.group_prefix}/{repo_id}/{suffix}"
 
 
 def is_admin(*, group_config: GroupAuthzConfig, auth_context: AuthContext) -> bool:
+    """Return True if the caller is in the configured admin group.
+
+    Why this exists:
+    - Admins have full access; this helper centralizes that check.
+    """
     return group_config.admin_group in auth_context.groups
 
 
 def is_allowed_for_repo(*, group_config: GroupAuthzConfig, auth_context: AuthContext, repo_id: str, op: str) -> bool:
+    """Check if the caller is allowed to perform an operation on a repo.
+
+    Why this exists:
+    - The API server needs to enforce repo-scoped read/write permissions based on group membership.
+    """
     if is_admin(group_config=group_config, auth_context=auth_context):
         return True
     expected = group_for_repo(group_config=group_config, repo_id=repo_id, op=op)

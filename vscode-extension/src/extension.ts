@@ -459,6 +459,12 @@ async function pickAndOpenCitation(citations: Citation[], workspaceFolder: vscod
   editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
 }
 
+/**
+ * Extension entrypoint: register commands and wire UI.
+ *
+ * Why this exists:
+ * - VS Code calls this on activation to set up the CodeKnowl commands.
+ */
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('CodeKnowl');
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -690,6 +696,12 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 }
 
+/**
+ * Extension deactivation cleanup.
+ *
+ * Why this exists:
+ * - VS Code calls this when the extension is deactivated; we have no cleanup to do.
+ */
 export function deactivate(): void {
   // no-op
 }

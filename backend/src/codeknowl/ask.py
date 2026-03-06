@@ -20,12 +20,23 @@ from codeknowl.query import explain_file_stub, find_callers_best_effort, where_i
 
 @dataclass(frozen=True)
 class AskResult:
+    """Result of an ask query with answer, citations, and evidence.
+
+    Why this exists:
+    - API responses need a stable structure that includes the answer, evidence, and citations.
+    """
+
     answer: str
     citations: list[dict[str, Any]]
     evidence: dict[str, Any]
 
 
 def _limit_text(text: str, *, max_chars: int) -> str:
+    """Truncate text to a maximum character limit with ellipsis.
+
+    Why this exists:
+    - Evidence bundling needs to cap individual hit text to stay within LLM context limits.
+    """
     if max_chars <= 0:
         return ""
     if len(text) <= max_chars:
@@ -42,6 +53,11 @@ def constrain_semantic_hits(
     max_hit_text_chars: int,
     max_total_text_chars: int,
 ) -> list[dict[str, Any]]:
+    """Cap the number and size of semantic hits to fit within context limits.
+
+    Why this exists:
+    - Evidence bundling must limit the total text sent to the LLM while preserving relevance.
+    """
     if not semantic_hits:
         return []
 
@@ -64,6 +80,11 @@ def constrain_semantic_hits(
 
 
 def _qa_limits_from_env() -> tuple[int, int, int, int]:
+    """Load QA evidence limits from environment variables.
+
+    Why this exists:
+    - Operators need to tune evidence caps per deployment without code changes.
+    """
     max_hits = int(os.environ.get("CODEKNOWL_QA_SEMANTIC_HITS_K", "8"))
     max_hit_text_chars = int(os.environ.get("CODEKNOWL_QA_HIT_MAX_CHARS", "2000"))
     max_total_text_chars = int(os.environ.get("CODEKNOWL_QA_EVIDENCE_MAX_TEXT_CHARS", "16000"))
@@ -72,6 +93,11 @@ def _qa_limits_from_env() -> tuple[int, int, int, int]:
 
 
 def _evidence_json_with_cap(evidence: dict[str, Any], *, max_chars: int) -> str:
+    """Serialize evidence to JSON, shrinking semantic hits if necessary.
+
+    Why this exists:
+    - LLM prompts need evidence serialized to JSON that fits within strict token limits.
+    """
     raw = json.dumps(evidence, ensure_ascii=False, indent=2, sort_keys=True)
     if max_chars <= 0 or len(raw) <= max_chars:
         return raw
@@ -104,6 +130,11 @@ def _evidence_json_with_cap(evidence: dict[str, Any], *, max_chars: int) -> str:
 
 
 def _extract_repo_path_candidate(question: str) -> str | None:
+    """Extract a likely repo-relative path from a question.
+
+    Why this exists:
+    - Best-effort file-scoped queries may reference a path; this extracts it for deterministic routing.
+    """
     m = re.search(r"([\w\-./]+\.[a-zA-Z0-9]{1,6})", question)
     if not m:
         return None
@@ -111,6 +142,11 @@ def _extract_repo_path_candidate(question: str) -> str | None:
 
 
 def _extract_identifier_candidate(question: str) -> str | None:
+    """Extract the last identifier token from a question.
+
+    Why this exists:
+    - Best-effort symbol queries may reference an identifier; this extracts it for deterministic routing.
+    """
     tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", question)
     if not tokens:
         return None
@@ -118,6 +154,11 @@ def _extract_identifier_candidate(question: str) -> str | None:
 
 
 def _dedupe_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Deduplicate citations by file path and line range.
+
+    Why this exists:
+    - Evidence bundling may produce duplicate citations; this removes them for cleaner output.
+    """
     uniq: dict[tuple[str, int | None, int | None], dict[str, Any]] = {}
     for c in citations:
         key = (c.get("file_path"), c.get("start_line"), c.get("end_line"))
@@ -128,6 +169,11 @@ def _dedupe_citations(citations: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _maybe_add_semantic_hits(
     semantic_hits: list[dict[str, Any]] | None, evidence: dict[str, Any], citations: list[dict[str, Any]]
 ) -> None:
+    """Add semantic hits to the evidence bundle and citations list.
+
+    Why this exists:
+    - Semantic hits are a key evidence source; they must be included in both evidence and citations.
+    """
     if not semantic_hits:
         return
 
@@ -148,6 +194,11 @@ def _maybe_add_semantic_hits(
 def _maybe_add_file_stub(
     artifacts: dict[str, Any], question: str, evidence: dict[str, Any], citations: list[dict[str, Any]]
 ) -> None:
+    """Add a deterministic file explanation stub if the question references a file.
+
+    Why this exists:
+    - Best-effort file-scoped queries should return a deterministic stub without LLM usage.
+    """
     file_path = _extract_repo_path_candidate(question)
     if not file_path:
         return
@@ -168,6 +219,11 @@ def _maybe_add_file_stub(
 def _maybe_add_where_defined(
     artifacts: dict[str, Any], question: str, evidence: dict[str, Any], citations: list[dict[str, Any]]
 ) -> None:
+    """Add symbol definition locations if the question asks 'where defined'.
+
+    Why this exists:
+    - Best-effort symbol queries should return definition locations without LLM usage.
+    """
     q = question.lower()
     if "where" not in q or ("defined" not in q and "definition" not in q):
         return
@@ -187,6 +243,11 @@ def _maybe_add_where_defined(
 def _maybe_add_call_sites(
     artifacts: dict[str, Any], question: str, evidence: dict[str, Any], citations: list[dict[str, Any]]
 ) -> None:
+    """Add call sites if the question mentions 'call'.
+
+    Why this exists:
+    - Best-effort relationship queries should return call sites without LLM usage.
+    """
     q = question.lower()
     if "call" not in q:
         return
@@ -212,6 +273,9 @@ def build_evidence_bundle(
     """Build a best-effort evidence bundle from snapshot artifacts.
 
     This is used both for deterministic Q&A commands and as grounding for LLM-backed answers.
+
+    Why this exists:
+    - All QA flows need a single, citation-backed evidence bundle.
     """
 
     evidence: dict[str, Any] = {"question": question, "best_effort": True}
@@ -243,7 +307,11 @@ def answer_with_llm(
     question: str,
     semantic_hits: list[dict[str, Any]] | None = None,
 ) -> AskResult:
-    """Generate a short, evidence-grounded answer from an OpenAI-compatible LLM."""
+    """Generate a short, evidence-grounded answer from an OpenAI-compatible LLM.
+
+    Why this exists:
+    - Single-model QA provides a quick answer grounded in the evidence bundle.
+    """
     evidence, citations = build_evidence_bundle(artifacts, question, semantic_hits=semantic_hits)
 
     *_, max_evidence_json_chars = _qa_limits_from_env()
@@ -277,6 +345,11 @@ def answer_with_llm_synthesis(
     question: str,
     semantic_hits: list[dict[str, Any]] | None = None,
 ) -> AskResult:
+    """Generate a multi-model synthesized answer from three LLM profiles.
+
+    Why this exists:
+    - Multi-model QA improves answer quality by synthesizing specialized model outputs.
+    """
     evidence, citations = build_evidence_bundle(artifacts, question, semantic_hits=semantic_hits)
     *_, max_evidence_json_chars = _qa_limits_from_env()
     evidence_json = _evidence_json_with_cap(evidence, max_chars=max_evidence_json_chars)

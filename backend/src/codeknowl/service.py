@@ -68,6 +68,13 @@ def _get_update_lock(repo_id: str) -> threading.Lock:
 
 @dataclass(frozen=True)
 class RepoRecord:
+    """Represents a repository registered with CodeKnowl.
+
+    Why this exists:
+    - The API/CLI needs a stable, serializable record of what repositories are in scope, how to locate them locally,
+      and which branch is considered "accepted" for indexing and queries.
+    """
+
     repo_id: str
     local_path: str
     accepted_branch: str
@@ -77,6 +84,13 @@ class RepoRecord:
 
 @dataclass(frozen=True)
 class IndexRunRecord:
+    """Represents a single indexing or update run for a repository.
+
+    Why this exists:
+    - Operators and IDE users need a queryable history of indexing outcomes (running/succeeded/failed) and the
+      snapshot commit associated with the run.
+    """
+
     run_id: str
     repo_id: str
     status: str
@@ -134,6 +148,12 @@ class CodeKnowlService:
         accepted_branch: str,
         preferred_remote: str | None,
     ) -> RepoRecord:
+        """Register a repository using a local filesystem path.
+
+        Why this exists:
+        - The MVP onboarding flow is local-first: operators and IDE users point CodeKnowl at an already-cloned
+          working copy, and CodeKnowl persists the registration so indexing and queries can be repeated.
+        """
         repo_id = str(uuid.uuid4())
         created_at_utc = _utc_now_iso()
         self._conn.execute(
@@ -151,6 +171,11 @@ class CodeKnowlService:
         )
 
     def list_repos(self) -> list[RepoRecord]:
+        """List registered repositories.
+
+        Why this exists:
+        - The IDE and operators need to discover repo scope and present choices for repo-scoped operations.
+        """
         rows = self._conn.execute(
             "SELECT repo_id, local_path, accepted_branch, preferred_remote, created_at_utc "
             "FROM repos ORDER BY created_at_utc DESC"
@@ -158,6 +183,12 @@ class CodeKnowlService:
         return [RepoRecord(**dict(row)) for row in rows.fetchall()]
 
     def offboard_repo(self, repo_id: str) -> None:
+        """Remove a repository from CodeKnowl so it is no longer queryable.
+
+        Why this exists:
+        - Off-boarding is required by the PRD so operators can explicitly remove repos from query scope (e.g.,
+          migrations, decommissioning, or policy changes).
+        """
         repo = self.get_repo(repo_id)
         self._conn.execute("DELETE FROM index_runs WHERE repo_id = ?", (repo.repo_id,))
         self._conn.execute("DELETE FROM repos WHERE repo_id = ?", (repo.repo_id,))
@@ -182,6 +213,11 @@ class CodeKnowlService:
                 pass
 
     def start_index_run(self, repo_id: str) -> IndexRunRecord:
+        """Create an index run record in the running state.
+
+        Why this exists:
+        - Indexing needs operator-visible status. This method creates durable state before the actual work starts.
+        """
         run_id = str(uuid.uuid4())
         started_at_utc = _utc_now_iso()
         self._conn.execute(
@@ -192,6 +228,11 @@ class CodeKnowlService:
         return self.get_index_run(run_id)
 
     def complete_index_run(self, run_id: str, *, head_commit: str) -> IndexRunRecord:
+        """Mark a previously started index run as succeeded.
+
+        Why this exists:
+        - Downstream queries depend on knowing the last successfully indexed snapshot.
+        """
         finished_at_utc = _utc_now_iso()
         self._conn.execute(
             "UPDATE index_runs SET status = ?, finished_at_utc = ?, head_commit = ? WHERE run_id = ?",
@@ -201,6 +242,11 @@ class CodeKnowlService:
         return self.get_index_run(run_id)
 
     def fail_index_run(self, run_id: str, *, error: str) -> IndexRunRecord:
+        """Mark a previously started index run as failed.
+
+        Why this exists:
+        - Operators need failure visibility and the system must not silently treat failed runs as current.
+        """
         finished_at_utc = _utc_now_iso()
         self._conn.execute(
             "UPDATE index_runs SET status = ?, finished_at_utc = ?, error = ? WHERE run_id = ?",
@@ -210,6 +256,11 @@ class CodeKnowlService:
         return self.get_index_run(run_id)
 
     def get_repo(self, repo_id: str) -> RepoRecord:
+        """Load a repository registration by repo_id.
+
+        Why this exists:
+        - Most repo-scoped operations (indexing, update, QA) need to resolve the local path and policy fields.
+        """
         row = self._conn.execute(
             "SELECT repo_id, local_path, accepted_branch, preferred_remote, created_at_utc "
             "FROM repos WHERE repo_id = ?",
@@ -220,6 +271,11 @@ class CodeKnowlService:
         return RepoRecord(**dict(row))
 
     def get_index_run(self, run_id: str) -> IndexRunRecord:
+        """Load an index run record by run_id.
+
+        Why this exists:
+        - Status endpoints need to return the authoritative record for a run.
+        """
         row = self._conn.execute(
             "SELECT run_id, repo_id, status, started_at_utc, finished_at_utc, error, head_commit "
             "FROM index_runs WHERE run_id = ?",
@@ -230,6 +286,11 @@ class CodeKnowlService:
         return IndexRunRecord(**dict(row))
 
     def get_latest_index_run_for_repo(self, repo_id: str) -> IndexRunRecord | None:
+        """Return the most recent index run for a repo, if any.
+
+        Why this exists:
+        - Status reporting must reflect the latest attempt, not only the last success.
+        """
         row = self._conn.execute(
             """
             SELECT run_id, repo_id, status, started_at_utc, finished_at_utc, error, head_commit
@@ -245,6 +306,11 @@ class CodeKnowlService:
         return IndexRunRecord(**dict(row))
 
     def get_latest_successful_index_run_for_repo(self, repo_id: str) -> IndexRunRecord | None:
+        """Return the most recent successful index run for a repo, if any.
+
+        Why this exists:
+        - Query answers must be grounded in a known-good snapshot; this identifies the latest usable commit.
+        """
         row = self._conn.execute(
             """
             SELECT run_id, repo_id, status, started_at_utc, finished_at_utc, error, head_commit
@@ -260,6 +326,13 @@ class CodeKnowlService:
         return IndexRunRecord(**dict(row))
 
     def run_indexing_sync(self, run_id: str) -> IndexRunRecord:
+        """Perform a full indexing run for a repository snapshot.
+
+        Why this exists:
+        - This is the MVP execution path for initial indexing: it builds deterministic artifacts (files/symbols/calls),
+          produces semantic chunks/embeddings, and records the resulting snapshot as the authoritative head commit for
+          subsequent queries.
+        """
         repo = self.get_repo(self.get_index_run(run_id).repo_id)
         repo_path = Path(repo.local_path)
 
@@ -338,6 +411,10 @@ class CodeKnowlService:
         If the repo has never been indexed successfully, this performs a full index of the accepted head.
 
         This method is accepted-code-first: it ignores local working tree state and targets the accepted branch head.
+
+        Why this exists:
+        - The PRD requires incremental updates: when the accepted branch advances, CodeKnowl must update derived
+          artifacts and semantic index data without requiring a full re-index every time.
         """
 
         repo = self.get_repo(repo_id)
@@ -497,6 +574,12 @@ class CodeKnowlService:
             lock.release()
 
     def repo_status(self, repo_id: str) -> dict[str, Any]:
+        """Return the current status view for a repository.
+
+        Why this exists:
+        - IDE and operator workflows need a single endpoint/command to see the latest run status and the currently
+          indexed head commit.
+        """
         repo = self.get_repo(repo_id)
         latest = self.get_latest_index_run_for_repo(repo_id)
         return {
@@ -526,6 +609,11 @@ class CodeKnowlService:
         return head_commit, load_snapshot_artifacts(self._data_dir, repo_id, head_commit)
 
     def qa_where_is_symbol_defined(self, repo_id: str, symbol_name: str) -> dict[str, Any]:
+        """Answer a deterministic "where is this symbol defined" question.
+
+        Why this exists:
+        - This supports IDE navigation and grounds answers in citations without requiring an LLM.
+        """
         head_commit, artifacts = self._load_latest_artifacts(repo_id)
         return {
             "repo_id": repo_id,
@@ -535,6 +623,11 @@ class CodeKnowlService:
         }
 
     def qa_what_calls_symbol_best_effort(self, repo_id: str, callee_name: str) -> dict[str, Any]:
+        """Answer a best-effort "what calls this symbol" question.
+
+        Why this exists:
+        - This supports relationship navigation in the IDE and provides citations for call sites when available.
+        """
         head_commit, artifacts = self._load_latest_artifacts(repo_id)
         return {
             "repo_id": repo_id,
@@ -544,6 +637,12 @@ class CodeKnowlService:
         }
 
     def qa_explain_file_stub(self, repo_id: str, file_path: str) -> dict[str, Any]:
+        """Return a deterministic file explanation stub with citations.
+
+        Why this exists:
+        - The IDE needs a fast "explain this file" workflow; this provides a baseline answer grounded in extracted
+          artifacts without requiring an LLM.
+        """
         head_commit, artifacts = self._load_latest_artifacts(repo_id)
         return {
             "repo_id": repo_id,
@@ -553,6 +652,12 @@ class CodeKnowlService:
         }
 
     def qa_ask_llm(self, repo_id: str, question: str) -> dict[str, Any]:
+        """Answer a free-form question using evidence retrieval and optional LLM synthesis.
+
+        Why this exists:
+        - This is the primary natural-language Q&A surface: retrieve evidence (semantic hits + structured artifacts)
+          and produce an answer grounded in that evidence, optionally using multi-model synthesis.
+        """
         head_commit, artifacts = self._load_latest_artifacts(repo_id)
 
         semantic_hits: list[dict[str, Any]] = []
@@ -658,6 +763,12 @@ class CodeKnowlService:
         return matches
 
     def qa_find_occurrences(self, repo_id: str, needle: str, *, max_results: int = 200) -> dict[str, Any]:
+        """Find text occurrences across repo files with citations.
+
+        Why this exists:
+        - Provides a deterministic fallback for "find occurrences" workflows when semantic or symbol-based queries are
+          insufficient.
+        """
         if not needle:
             raise ValueError("needle must not be empty")
 

@@ -121,6 +121,12 @@ def _cmd_qa_ask(service: CodeKnowlService, args) -> None:
 
 
 def main() -> None:
+    """CLI entrypoint for CodeKnowl local-first operations.
+
+    Why this exists:
+    - Operators and developers need a simple command-line
+    interface to register repos, run indexing, and query without using the IDE.
+    """
     parser = argparse.ArgumentParser(prog="codeknowl")
     parser.add_argument(
         "--data-dir",

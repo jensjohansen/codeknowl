@@ -13,6 +13,11 @@ from pathlib import Path
 
 
 def rev_parse(repo_path: Path, ref: str) -> str:
+    """Resolve a git ref to a commit hash.
+
+    Why this exists:
+    - Indexing and updates need to resolve refs (HEAD, remote branches) to stable commit identifiers.
+    """
     result = subprocess.run(
         ["git", "-C", str(repo_path), "rev-parse", ref],
         capture_output=True,
@@ -23,10 +28,20 @@ def rev_parse(repo_path: Path, ref: str) -> str:
 
 
 def get_head_commit(repo_path: Path) -> str:
+    """Return the current HEAD commit hash.
+
+    Why this exists:
+    - Initial indexing needs to capture the current snapshot identifier.
+    """
     return rev_parse(repo_path, "HEAD")
 
 
 def fetch_remote(repo_path: Path, remote: str) -> None:
+    """Fetch updates from a remote.
+
+    Why this exists:
+    - Accepted-code-first updates need to ensure the remote refs are up-to-date before resolution.
+    """
     subprocess.run(
         ["git", "-C", str(repo_path), "fetch", remote],
         capture_output=True,
@@ -36,6 +51,11 @@ def fetch_remote(repo_path: Path, remote: str) -> None:
 
 
 def diff_name_status(repo_path: Path, old_commit: str, new_commit: str) -> list[tuple[str, str]]:
+    """Return a list of (status, path) for changed files between two commits.
+
+    Why this exists:
+    - Incremental updates need to know which files were added, modified, or deleted.
+    """
     result = subprocess.run(
         ["git", "-C", str(repo_path), "diff", "--name-status", f"{old_commit}..{new_commit}"],
         capture_output=True,
@@ -61,6 +81,11 @@ def diff_name_status(repo_path: Path, old_commit: str, new_commit: str) -> list[
 
 
 def worktree_add_detached(repo_path: Path, worktree_path: Path, commit: str) -> None:
+    """Create a detached worktree for a specific commit.
+
+    Why this exists:
+    - Indexing and updates need a temporary, stable checkout of a specific commit without affecting the main repo.
+    """
     subprocess.run(
         [
             "git",
@@ -79,6 +104,11 @@ def worktree_add_detached(repo_path: Path, worktree_path: Path, commit: str) -> 
 
 
 def worktree_remove(repo_path: Path, worktree_path: Path) -> None:
+    """Remove a worktree, ignoring errors.
+
+    Why this exists:
+    - Cleanup after temporary checkouts must not raise exceptions if the worktree was already removed.
+    """
     subprocess.run(
         ["git", "-C", str(repo_path), "worktree", "remove", "--force", str(worktree_path)],
         capture_output=True,

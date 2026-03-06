@@ -37,6 +37,11 @@ def _safe_str(v: object, *, max_len: int = 256) -> str | None:
 
 
 def hash_text(text: str | None) -> str | None:
+    """Hash a string for audit logging to avoid storing raw query text.
+
+    Why this exists:
+    - Audit logs should not contain raw user queries; this provides a reversible, privacy-preserving identifier.
+    """
     if not text:
         return None
     try:
@@ -47,6 +52,12 @@ def hash_text(text: str | None) -> str | None:
 
 @dataclass(frozen=True)
 class AuditConfig:
+    """Configuration for audit logging behavior and output.
+
+    Why this exists:
+    - Operators need to enable/disable audit, choose output sink, and decide whether to include query text.
+    """
+
     enabled: bool
     sink: str
     file_path: Path | None
@@ -54,6 +65,11 @@ class AuditConfig:
 
     @staticmethod
     def from_env(env: dict[str, str]) -> "AuditConfig":
+        """Load audit configuration from environment variables.
+
+        Why this exists:
+        - The backend should be configurable via environment without code changes.
+        """
         enabled_raw = env.get("CODEKNOWL_AUDIT_ENABLED", "true").strip().lower()
         enabled = enabled_raw not in {"0", "false", "no", "off"}
 
@@ -78,6 +94,12 @@ class AuditConfig:
 
 
 class AuditLogger:
+    """Structured JSON-line audit logger with configurable sinks.
+
+    Why this exists:
+    - The API server needs a fail-open, structured audit log for security-relevant events.
+    """
+
     def __init__(self, config: AuditConfig):
         self._config = config
         self._logger = logging.getLogger("codeknowl.audit")
@@ -98,15 +120,35 @@ class AuditLogger:
         self._logger.addHandler(handler)
 
     def enabled(self) -> bool:
+        """Return True if audit logging is enabled.
+
+        Why this exists:
+        - Callers need a fast boolean check to avoid work when audit is disabled.
+        """
         return self._config.enabled
 
     def include_query_text(self) -> bool:
+        """Return True if raw query text should be included in audit events.
+
+        Why this exists:
+        - Event builders need to decide whether to emit query text or only its hash.
+        """
         return self._config.include_query_text
 
     def new_request_id(self) -> str:
+        """Generate a new request identifier for correlation.
+
+        Why this exists:
+        - Request handlers need a stable ID to correlate multiple audit events for a single request.
+        """
         return str(uuid.uuid4())
 
     def log(self, event: str, *, fields: dict[str, Any] | None = None) -> None:
+        """Emit a structured audit log event.
+
+        Why this exists:
+        - The API server needs to log security-relevant events in structured JSON-line format.
+        """
         if not self._config.enabled:
             return
 
@@ -128,15 +170,20 @@ _AUDIT = AuditLogger(AuditConfig.from_env(os.environ))
 
 
 def audit() -> AuditLogger:
+    """Return the global audit logger instance.
+
+    Why this exists:
+    - The API server needs a single, configured logger to emit structured events.
+    """
     return _AUDIT
 
 
 def audit_fields_from_request(request) -> dict[str, Any]:
-    """Best-effort extraction of request metadata.
+    """Extract safe audit fields from an HTTP request.
 
-    Avoids logging secrets (e.g., Authorization header contents).
+    Why this exists:
+    - Audit events need request metadata without exposing secrets (e.g., Authorization header contents).
     """
-
     headers = getattr(request, "headers", None)
 
     user_agent = None
@@ -167,6 +214,11 @@ def audit_fields_from_request(request) -> dict[str, Any]:
 
 
 def audit_fields_from_auth_context(auth_context: object | None) -> dict[str, Any]:
+    """Extract safe audit fields from an AuthContext.
+
+    Why this exists:
+    - Audit events need stable auth metadata (subject/username) without exposing group lists or tokens.
+    """
     if auth_context is None:
         return {
             "auth.subject": None,

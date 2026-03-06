@@ -11,6 +11,12 @@ import * as path from 'path';
 
 import Mocha from 'mocha';
 
+/**
+ * Run the test suite via Mocha.
+ *
+ * Why this exists:
+ * - VS Code test runner expects this entrypoint to execute the tests.
+ */
 export function run(): Promise<void> {
   return new Promise((resolve, reject) => {
     const mocha = new Mocha({

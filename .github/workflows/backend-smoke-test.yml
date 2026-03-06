@@ -23,6 +23,10 @@ jobs:
         with:
           version: "0.9.5"
 
+      - name: Check docstrings/JSDoc
+        run: |
+          python3 scripts/check-docstrings.py
+
       - name: Run backend smoke test (no-LLM)
         env:
           CODEKNOWL_SMOKE_REPO_PATH: ${{ github.workspace }}

@@ -19,17 +19,33 @@ from codeknowl.artifacts import repo_snapshot_dir
 
 @dataclass(frozen=True)
 class QueryCitation:
+    """Citation metadata for query results.
+
+    Why this exists:
+    - QA answers need stable, reproducible evidence locations.
+    """
+
     file_path: str
     start_line: int
     end_line: int
 
 
 def _load_json(path: Path) -> Any:
+    """Load a JSON file.
+
+    Why this exists:
+    - Snapshot artifact loading needs a simple helper that raises on parse errors.
+    """
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
 def load_snapshot_artifacts(data_dir: Path, repo_id: str, head_commit: str) -> dict[str, Any]:
+    """Load all JSON artifacts for a snapshot.
+
+    Why this exists:
+    - Query helpers need a single place to load files/symbols/calls/chunks for a given snapshot.
+    """
     root = repo_snapshot_dir(data_dir, repo_id, head_commit)
     chunks_path = root / "chunks.json"
     chunks = _load_json(chunks_path) if chunks_path.exists() else []
@@ -42,6 +58,11 @@ def load_snapshot_artifacts(data_dir: Path, repo_id: str, head_commit: str) -> d
 
 
 def where_is_symbol_defined(artifacts: dict[str, Any], symbol_name: str) -> list[dict[str, Any]]:
+    """Return definition locations for a symbol name.
+
+    Why this exists:
+    - IDE navigation and deterministic QA need to know where symbols are defined.
+    """
     matches: list[dict[str, Any]] = []
     for sym in artifacts.get("symbols", []):
         if sym.get("name") == symbol_name:
@@ -62,6 +83,11 @@ def where_is_symbol_defined(artifacts: dict[str, Any], symbol_name: str) -> list
 
 
 def _callee_matches(callee_expr: str, requested: str) -> bool:
+    """Best-effort matching of callee expressions to a requested name.
+
+    Why this exists:
+    - Call records store full expressions; callers may search for unqualified names.
+    """
     if callee_expr == requested:
         return True
 
@@ -81,6 +107,11 @@ def _callee_matches(callee_expr: str, requested: str) -> bool:
 
 
 def find_callers_best_effort(artifacts: dict[str, Any], callee_name: str) -> list[dict[str, Any]]:
+    """Find call sites that reference a callee name (best-effort matching).
+
+    Why this exists:
+    - Relationship navigation and deterministic QA need to locate callers even with complex expressions.
+    """
     results: list[dict[str, Any]] = []
     for call in artifacts.get("calls", []):
         callee_expr = call.get("callee_name") or ""
@@ -103,6 +134,11 @@ def find_callers_best_effort(artifacts: dict[str, Any], callee_name: str) -> lis
 
 
 def explain_file_stub(artifacts: dict[str, Any], file_path: str) -> dict[str, Any]:
+    """Return a deterministic file explanation stub.
+
+    Why this exists:
+    - The IDE needs a fast, citation-backed file summary without using an LLM.
+    """
     file_rec = None
     for f in artifacts.get("files", []):
         if f.get("path") == file_path:
