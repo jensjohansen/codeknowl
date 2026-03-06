@@ -16,6 +16,12 @@ from pathlib import Path
 from blacksheep import Application, Content, Response
 
 from codeknowl.async_service import create_async_service
+from codeknowl.audit import (
+    audit,
+    audit_fields_from_auth_context,
+    audit_fields_from_request,
+    hash_text,
+)
 from codeknowl.auth import (
     GroupAuthzConfig,
     OidcConfig,
@@ -23,12 +29,6 @@ from codeknowl.auth import (
     is_admin,
     is_allowed_for_repo,
     parse_bearer_token,
-)
-from codeknowl.audit import (
-    audit,
-    audit_fields_from_auth_context,
-    audit_fields_from_request,
-    hash_text,
 )
 from codeknowl.config import AppConfig
 from codeknowl.metrics import METRICS
