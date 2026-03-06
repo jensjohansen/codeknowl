@@ -26,6 +26,9 @@ dependencies = [
   "cryptography>=42.0.0",
   "tree-sitter==0.20.4",
   "tree-sitter-languages==1.10.2",
+  "arq>=0.26.0",
+  "redis>=5.0.0",
+  "click>=8.0.0",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +39,7 @@ dev = [
 
 [project.scripts]
 codeknowl = "codeknowl.cli:main"
+codeknowl-worker = "codeknowl.worker:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

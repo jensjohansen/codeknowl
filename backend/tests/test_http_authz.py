@@ -15,7 +15,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 _ROOT = Path(__file__).resolve().parents[1]
 _SRC = _ROOT / "src"
@@ -76,7 +76,14 @@ class TestHttpAuthz(unittest.IsolatedAsyncioTestCase):
         ):
             from codeknowl.app import create_app  # noqa: E402
 
-            app = create_app(AppConfig(data_dir=self._data_dir))
+            # Mock Redis for tests
+            with patch("codeknowl.async_service.create_queue") as mock_create_queue:
+                mock_queue = AsyncMock()
+                mock_queue.enqueue_index_job.return_value = "job-id"
+                mock_queue.enqueue_update_job.return_value = "job-id"
+                mock_create_queue.return_value = mock_queue
+
+                app = await create_app(AppConfig(data_dir=self._data_dir))
             await app.start()
             try:
                 client = TestClient(app)

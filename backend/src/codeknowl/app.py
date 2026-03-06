@@ -1,6 +1,7 @@
-"""File: backend/src/codeknowl/app.py
-Purpose: Define the CodeKnowl BlackSheep ASGI application and HTTP route wiring.
-Product/business importance: This is the backend entrypoint that serves IDE and CLI-driven workflows for Milestone 1+.
+"""
+File: backend/src/codeknowl/app.py
+Purpose: BlackSheep ASGI application and HTTP route definitions.
+Product/business importance: Provides the HTTP API surface for CodeKnowl backend services.
 
 Copyright (c) 2026 John K Johansen
 License: MIT (see LICENSE)
@@ -8,15 +9,13 @@ License: MIT (see LICENSE)
 
 from __future__ import annotations
 
-import json as pyjson
+import json
 import os
 from pathlib import Path
 
-from blacksheep import Application, Content
-from blacksheep.messages import Response
-from blacksheep.server.normalization import ensure_response
+from blacksheep import Application, Content, Response
 
-from codeknowl.audit import audit, audit_fields_from_auth_context, audit_fields_from_request, hash_text
+from codeknowl.async_service import create_async_service
 from codeknowl.auth import (
     GroupAuthzConfig,
     OidcConfig,
@@ -24,6 +23,12 @@ from codeknowl.auth import (
     is_admin,
     is_allowed_for_repo,
     parse_bearer_token,
+)
+from codeknowl.audit import (
+    audit,
+    audit_fields_from_auth_context,
+    audit_fields_from_request,
+    hash_text,
 )
 from codeknowl.config import AppConfig
 from codeknowl.metrics import METRICS
@@ -37,7 +42,7 @@ def _json_response(data: object, *, status: int = 200) -> Response:
     Why this exists:
     - HTTP endpoints need a consistent way to return JSON responses.
     """
-    payload = pyjson.dumps(data, ensure_ascii=False).encode("utf-8")
+    payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
     return Response(status, None, Content(b"application/json", payload))
 
 
@@ -677,7 +682,7 @@ def _make_auth_middleware(*, api_key: str | None, oidc_verifier: OidcVerifier | 
 
         path = getattr(request, "path", None)
         if path in {"/health", "/metrics"}:
-            return ensure_response(await handler(request))
+            return await handler(request)
 
         auth_context, unauthorized = _maybe_get_oidc_auth_context(request, oidc_verifier=oidc_verifier)
         if unauthorized is not None:
@@ -711,7 +716,7 @@ def _make_auth_middleware(*, api_key: str | None, oidc_verifier: OidcVerifier | 
             return _json_response({"error": "unauthorized"}, status=401)
 
         request.auth = auth_context
-        return ensure_response(await handler(request))
+        return await handler(request)
 
     return auth_middleware
 
@@ -735,15 +740,17 @@ def _configure_auth(app: Application):
     return auth_enabled, group_config
 
 
-def create_app(config: AppConfig | None = None) -> Application:
+async def create_app(config: AppConfig | None = None) -> Application:
     """Create the BlackSheep ASGI app for CodeKnowl backend.
 
     Why this exists:
     - Centralizes app creation and route registration.
     """
     configuration = config or AppConfig.default()
-    service = CodeKnowlService(data_dir=configuration.data_dir)
-
+    
+    # Create async service with job queue
+    async_service = await create_async_service(configuration.data_dir)
+    
     app = Application()
 
     auth_enabled, group_config = _configure_auth(app)
@@ -760,9 +767,9 @@ def create_app(config: AppConfig | None = None) -> Application:
         else:
             start_repo_poller(data_dir=configuration.data_dir, interval_seconds=interval)
 
-    _register_health_routes(app, service, auth_enabled=auth_enabled, poll_interval_seconds=interval)
+    _register_health_routes(app, async_service, auth_enabled=auth_enabled, poll_interval_seconds=interval)
     _register_metrics_routes(app)
-    _register_repo_routes(app, service, group_config=group_config)
-    _register_qa_routes(app, service, group_config=group_config)
+    _register_repo_routes(app, async_service, group_config=group_config)
+    _register_qa_routes(app, async_service, group_config=group_config)
 
     return app

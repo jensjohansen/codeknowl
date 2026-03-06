@@ -8,6 +8,21 @@ License: MIT (see LICENSE)
 
 from __future__ import annotations
 
+import asyncio
+
 from codeknowl.app import create_app
 
-app = create_app()
+
+def sync_app():
+    """Create an app instance synchronously for ASGI servers.
+
+    Why this exists:
+    - ASGI servers expect a synchronous app object.
+    """
+    loop = asyncio.new_event_loop()
+    app = loop.run_until_complete(create_app())
+    loop.close()
+    return app
+
+
+app = sync_app()
