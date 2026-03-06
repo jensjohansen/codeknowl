@@ -303,7 +303,7 @@ def _register_repo_index_routes(app: Application, service: CodeKnowlService, *, 
 
 def _register_repo_update_routes(
     app: Application,
-    service: CodeKnowlService,
+    service,
     *,
     group_config: GroupAuthzConfig,
 ) -> None:
@@ -312,7 +312,7 @@ def _register_repo_update_routes(
     Why this exists:
     - The IDE needs to trigger accepted-code-first updates.
     """
-    def update_repo(repo_id: str, request) -> Response:
+    async def update_repo(repo_id: str, request) -> Response:
         forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="write")
         if forbidden is not None:
             audit().log(
@@ -328,39 +328,32 @@ def _register_repo_update_routes(
 
         METRICS.inc("http.repos.update.attempt")
         try:
-            completed = service.update_repo_to_accepted_head_sync(repo_id)
+            service.get_repo(repo_id)
         except KeyError:
             METRICS.inc("http.repos.update.not_found")
             return _json_response({"error": "repo not found"}, status=404)
-        if completed.status == "succeeded":
-            METRICS.inc("http.repos.update.succeeded")
-        else:
-            METRICS.inc("http.repos.update.failed")
-
+        
+        # Enqueue async job instead of running synchronously
+        job_id = await service.enqueue_update_job(repo_id)
+        METRICS.inc("http.repos.update.queued")
+        
         audit().log(
-            "repos.update.completed",
+            "repos.update.queued",
             fields={
                 **audit_fields_from_request(request),
                 **audit_fields_from_auth_context(_get_auth_context(request)),
                 "request.id": _get_request_id(request),
                 "repo.id": repo_id,
-                "run.id": completed.run_id,
-                "run.status": completed.status,
-                "run.head_commit": completed.head_commit,
+                "job.id": job_id,
             },
         )
-        return _json_response(
-            {
-                "run_id": completed.run_id,
-                "repo_id": completed.repo_id,
-                "status": completed.status,
-                "started_at_utc": completed.started_at_utc,
-                "finished_at_utc": completed.finished_at_utc,
-                "error": completed.error,
-                "head_commit": completed.head_commit,
-            }
-        )
-
+        
+        return _json_response({
+            "status": "queued",
+            "job_id": job_id,
+            "repo_id": repo_id,
+        })
+    
     app.router.add_post("/repos/{repo_id}/update", update_repo)
 
 

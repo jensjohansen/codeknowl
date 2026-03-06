@@ -24,8 +24,8 @@ sys.path.insert(0, str(_SRC))
 from blacksheep.testing import JSONContent, TestClient  # noqa: E402
 
 from codeknowl.auth import AuthContext  # noqa: E402
+from codeknowl.async_service import AsyncCodeKnowlService  # noqa: E402
 from codeknowl.config import AppConfig  # noqa: E402
-from codeknowl.service import CodeKnowlService, IndexRunRecord  # noqa: E402
 
 
 def _utc_now_iso() -> str:
@@ -47,17 +47,6 @@ class TestHttpAuthz(unittest.IsolatedAsyncioTestCase):
         def fake_verify_bearer_token(_self, _token: str) -> AuthContext:  # noqa: ANN001
             return AuthContext(subject="sub", username="u", groups=set(current_groups))
 
-        def fake_update_repo_to_accepted_head_sync(self, repo_id: str):  # noqa: ANN001
-            return IndexRunRecord(
-                run_id="run",
-                repo_id=repo_id,
-                status="succeeded",
-                started_at_utc=_utc_now_iso(),
-                finished_at_utc=_utc_now_iso(),
-                error=None,
-                head_commit="deadbeef",
-            )
-
         env = {
             "CODEKNOWL_AUTH_MODE": "oidc",
             "CODEKNOWL_OIDC_ISSUER_URL": "https://example.invalid/issuer",
@@ -69,9 +58,9 @@ class TestHttpAuthz(unittest.IsolatedAsyncioTestCase):
             patch.dict(os.environ, env, clear=False),
             patch("codeknowl.auth.OidcVerifier.verify_bearer_token", new=fake_verify_bearer_token),
             patch.object(
-                CodeKnowlService,
-                "update_repo_to_accepted_head_sync",
-                new=fake_update_repo_to_accepted_head_sync,
+                AsyncCodeKnowlService,
+                "enqueue_update_job",
+                new=AsyncMock(return_value="job-id"),
             ),
         ):
             from codeknowl.app import create_app  # noqa: E402
