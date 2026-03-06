@@ -618,15 +618,15 @@ Milestone status: Done
 
 ## Milestone 9 — Admin UI + non-engineer access
 
-Milestone status: Not started
+Milestone status: Done
 
 ### Definition of Done (PRD acceptance criteria)
 - Operators can manage repo lifecycle and view indexing status via a web UI.
 - Non-engineers can access Q&A with citations via a web UI (within authorized scope).
 
 ### Work items
-- [ ] ITD-21 Admin UI surface (React)
-  - Status: Not started
+- [x] ITD-21 Admin UI surface (React)
+  - Status: Done
   - Owner:
   - Target date:
   - Notes: Admin/ops UI for repo onboarding, indexing status, and health.
