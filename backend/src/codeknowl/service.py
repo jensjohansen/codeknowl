@@ -22,6 +22,9 @@ from codeknowl.artifacts import artifacts_root, dump_dataclasses, repo_snapshot_
 from codeknowl.ask import answer_with_llm_synthesis, build_evidence_bundle
 from codeknowl.chunking import ChunkRecord, chunk_repo_files, dump_chunks
 from codeknowl.embeddings import embeddings_client_from_env
+from codeknowl.graph_ingestion import create_ingestion_service
+from codeknowl.graph_store import create_graph_store
+from codeknowl.relationship_service import create_relationship_service
 from codeknowl.indexing import (
     build_file_inventory,
     build_file_records_for_paths,
@@ -110,6 +113,18 @@ class CodeKnowlService:
         self._vector_store = vector_store_from_env(data_dir=data_dir)
         self._embeddings = embeddings_client_from_env()
         self._reranker = reranker_from_env()
+        
+        # Initialize graph store and relationship service
+        try:
+            self._graph_store = create_graph_store()
+            self._graph_ingestion = create_ingestion_service(self._graph_store)
+            self._relationship_service = create_relationship_service(self._graph_store)
+        except Exception as e:
+            import logging
+            logging.warning("Failed to initialize graph store: %s", e)
+            self._graph_store = None
+            self._graph_ingestion = None
+            self._relationship_service = None
 
     def _index_semantic_snapshot(
         self,
@@ -791,3 +806,106 @@ class CodeKnowlService:
             "query": {"type": "find_occurrences", "needle": needle, "max_results": max_results},
             "results": results,
         }
+
+    def find_symbol_definition(self, symbol_name: str, repo_id: str | None = None) -> dict[str, Any] | None:
+        """Find where a symbol is defined.
+
+        Why this exists:
+        - Enables "go to definition" navigation.
+        - Supports PRD requirement for relationship navigation.
+        
+        Args:
+            symbol_name: Symbol name to find
+            repo_id: Optional repository filter
+            
+        Returns:
+            Symbol definition metadata or None if not found
+        """
+        if not self._relationship_service:
+            return {"error": "Relationship service not available"}
+        
+        return self._relationship_service.find_symbol_definition(symbol_name, repo_id)
+
+    def find_symbol_callers(self, symbol_name: str, repo_id: str | None = None, max_depth: int = 3) -> list[dict[str, Any]]:
+        """Find all callers of a symbol.
+
+        Why this exists:
+        - Enables "who calls this function" navigation.
+        - Supports impact analysis requirements.
+        - Implements PRD relationship navigation.
+        
+        Args:
+            symbol_name: Symbol to find callers for
+            repo_id: Optional repository filter
+            max_depth: Maximum traversal depth
+            
+        Returns:
+            List of caller relationships
+        """
+        if not self._relationship_service:
+            return []
+        
+        return self._relationship_service.find_callers(symbol_name, repo_id, max_depth)
+
+    def find_symbol_callees(self, symbol_name: str, repo_id: str | None = None, max_depth: int = 3) -> list[dict[str, Any]]:
+        """Find all functions called by a symbol.
+
+        Why this exists:
+        - Enables "what does this function call" navigation.
+        - Supports dependency analysis.
+        - Implements PRD relationship navigation.
+        
+        Args:
+            symbol_name: Symbol to find callees for
+            repo_id: Optional repository filter
+            max_depth: Maximum traversal depth
+            
+        Returns:
+            List of callee relationships
+        """
+        if not self._relationship_service:
+            return []
+        
+        return self._relationship_service.find_callees(symbol_name, repo_id, max_depth)
+
+    def get_symbol_summary(self, symbol_name: str, repo_id: str | None = None) -> dict[str, Any]:
+        """Get comprehensive symbol summary with relationships.
+
+        Why this exists:
+        - Provides complete symbol context for navigation.
+        - Combines multiple relationship queries.
+        - Supports comprehensive symbol understanding.
+        
+        Args:
+            symbol_name: Symbol to summarize
+            repo_id: Optional repository filter
+            
+        Returns:
+            Complete symbol summary
+        """
+        if not self._relationship_service:
+            return {"error": "Relationship service not available"}
+        
+        return self._relationship_service.get_symbol_summary(symbol_name, repo_id)
+
+    def ingest_repository_graph(self, repo_id: str) -> dict[str, Any]:
+        """Ingest repository into graph store.
+
+        Why this exists:
+        - Creates actual graph relationships for navigation.
+        - Supports CPG pattern implementation.
+        - Enables Milestone 7 functionality.
+        
+        Args:
+            repo_id: Repository identifier
+            
+        Returns:
+            Ingestion statistics
+        """
+        if not self._graph_ingestion:
+            return {"error": "Graph ingestion service not available"}
+        
+        repo = self.get_repo(repo_id)
+        repo_path = Path(repo.local_path)
+        
+        return self._graph_ingestion.ingest_repository(repo_path, repo_id)
