@@ -14,6 +14,7 @@ BACKEND_PROJECT="$PROJECT_ROOT/backend"
 REPO_PATH_DEFAULT="$PROJECT_ROOT"
 REPO_PATH="${CODEKNOWL_SMOKE_REPO_PATH:-$REPO_PATH_DEFAULT}"
 DATA_DIR="${CODEKNOWL_SMOKE_DATA_DIR:-$PROJECT_ROOT/.codeknowl-smoke}"
+ACCEPTED_BRANCH="${CODEKNOWL_SMOKE_ACCEPTED_BRANCH:-main}"
 
 echo "[smoke] repo_path=$REPO_PATH"
 echo "[smoke] data_dir=$DATA_DIR"
@@ -25,7 +26,7 @@ uv sync --project "$BACKEND_PROJECT" --extra dev >/dev/null
 uv run --project "$BACKEND_PROJECT" --extra dev -- ruff format --check backend/src >/dev/null
 uv run --project "$BACKEND_PROJECT" --extra dev -- ruff check backend/src >/dev/null
 
-REPO_ID="$(uv run --project "$BACKEND_PROJECT" -- python -m codeknowl --data-dir "$DATA_DIR" repo-register "$REPO_PATH" | uv run --project "$BACKEND_PROJECT" -- python -c 'import json,sys; print(json.load(sys.stdin)["repo_id"])')"
+REPO_ID="$(uv run --project "$BACKEND_PROJECT" -- python -m codeknowl --data-dir "$DATA_DIR" repo-register "$REPO_PATH" "$ACCEPTED_BRANCH" | uv run --project "$BACKEND_PROJECT" -- python -c 'import json,sys; print(json.load(sys.stdin)["repo_id"])')"
 
 echo "[smoke] repo_id=$REPO_ID"
 
@@ -71,12 +72,25 @@ if [[ -n "$FIRST_SYMBOL" ]]; then
   uv run --project "$BACKEND_PROJECT" -- python -m codeknowl --data-dir "$DATA_DIR" qa-what-calls "$REPO_ID" "$FIRST_SYMBOL" >/dev/null
 fi
 
+OCC_JSON="$(uv run --project "$BACKEND_PROJECT" -- python -m codeknowl --data-dir "$DATA_DIR" qa-find-occurrences "$REPO_ID" "$FIRST_FILE" --max-results 5)"
+OCC_COUNT="$(uv run --project "$BACKEND_PROJECT" -- python -c 'import json,sys; o=json.loads(sys.argv[1]); print(len(o.get("results") or []))' "$OCC_JSON")"
+if [[ -z "$OCC_COUNT" ]]; then
+  echo "[smoke] ERROR: occurrences query did not return results list"
+  exit 1
+fi
+
 echo "[smoke] deterministic QA passed"
 
 # Optional LLM-backed ask if configured
 if [[ -n "${CODEKNOWL_LLM_BASE_URL:-}" && -n "${CODEKNOWL_LLM_MODEL:-}" ]]; then
   echo "[smoke] running LLM-backed qa-ask"
   uv run --project "$BACKEND_PROJECT" -- python -m codeknowl --data-dir "$DATA_DIR" qa-ask "$REPO_ID" "What does $FIRST_FILE do?" >/dev/null
+fi
+
+uv run --project "$BACKEND_PROJECT" -- python -m codeknowl --data-dir "$DATA_DIR" repo-offboard "$REPO_ID" >/dev/null
+if uv run --project "$BACKEND_PROJECT" -- python -m codeknowl --data-dir "$DATA_DIR" repo-status "$REPO_ID" >/dev/null 2>&1; then
+  echo "[smoke] ERROR: repo-status succeeded after offboarding"
+  exit 1
 fi
 
 echo "[smoke] OK"

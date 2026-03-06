@@ -74,10 +74,10 @@ Shortlist candidates and compare them against the criteria below. Candidates may
 - Recommendation: continue building vs adopt/extend
 
 ## Owners
-- Decision owner:
-- Technical evaluator(s):
-- Licensing reviewer:
+- Decision owner: John K Johansen
+- Technical evaluator(s): John K Johansen
+- Licensing reviewer: John K Johansen
 
 ## Timeline
-- Start:
-- Target completion:
+- Start: 2026-02-27
+- Target completion: 2026-03-07

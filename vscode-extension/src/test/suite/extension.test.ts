@@ -18,5 +18,10 @@ suite('CodeKnowl Extension Test Suite', () => {
 
     const cmds = await vscode.commands.getCommands(true);
     assert.ok(cmds.includes('codeknowl.ask'), 'Expected codeknowl.ask to be registered');
+    assert.ok(cmds.includes('codeknowl.selectRepo'), 'Expected codeknowl.selectRepo to be registered');
+    assert.ok(cmds.includes('codeknowl.indexWorkspace'), 'Expected codeknowl.indexWorkspace to be registered');
+    assert.ok(cmds.includes('codeknowl.explainCurrentFile'), 'Expected codeknowl.explainCurrentFile to be registered');
+    assert.ok(cmds.includes('codeknowl.whereDefined'), 'Expected codeknowl.whereDefined to be registered');
+    assert.ok(cmds.includes('codeknowl.whatCalls'), 'Expected codeknowl.whatCalls to be registered');
   });
 });

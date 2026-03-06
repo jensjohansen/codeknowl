@@ -10,6 +10,38 @@ CodeKnowl is an on-prem, local-first “codebase analyst” that ingests one or 
 - A knowledge base suitable for retrieval, summarization, and analyst workflows.
 - An IDE-first experience (initially VS Code) for Q&A with citations, navigation, and impact analysis.
 
+## Local development
+
+### Backend
+
+See `backend/README.md` for the authoritative instructions to run the Python backend.
+
+### Environment variables
+
+This repository includes a `local.env` template at the repo root. It captures the backend's supported `CODEKNOWL_*`
+environment variables (LLM profiles for synthesis, embeddings, vector store, auth/audit, reranker, QA evidence caps).
+
+- **[secrets]** Do not commit real API keys.
+- **[loading]** Typical shell usage:
+
+```bash
+set -a
+source local.env
+set +a
+```
+
+By default, the backend stores state in `.codeknowl` (SQLite + artifacts). You can also choose local-only modes for
+development and tests:
+
+- `CODEKNOWL_VECTOR_MODE=file`
+- `CODEKNOWL_EMBED_MODE=hash`
+
+To enable LLM-backed `qa.ask` synthesis, configure either `CODEKNOWL_LLM_*` or the role-specific profiles:
+
+- `CODEKNOWL_LLM_CODING_*`
+- `CODEKNOWL_LLM_GENERAL_*`
+- `CODEKNOWL_LLM_SYNTH_*` (defaults to `GENERAL` if not set)
+
 ## Project docs
 
 ### Product

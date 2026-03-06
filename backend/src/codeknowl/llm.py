@@ -45,6 +45,39 @@ class LlmConfig:
             models_path=models_path,
         )
 
+    @staticmethod
+    def try_from_env(prefix: str = "CODEKNOWL_LLM_") -> "LlmConfig | None":
+        base_url = os.environ.get(f"{prefix}BASE_URL", "").strip()
+        model = os.environ.get(f"{prefix}MODEL", "").strip()
+        if not base_url or not model:
+            return None
+        return LlmConfig.from_env(prefix=prefix)
+
+
+@dataclass(frozen=True)
+class LlmProfiles:
+    coding: LlmConfig
+    general: LlmConfig
+    synth: LlmConfig
+
+    @staticmethod
+    def from_env() -> "LlmProfiles | None":
+        """Loads the three LLM roles used for QA synthesis.
+
+        Backward compatible behavior:
+        - If role-specific env vars are not present, fall back to CODEKNOWL_LLM_*.
+        - If SYNTH is not configured, defaults to GENERAL.
+        """
+
+        default = LlmConfig.try_from_env(prefix="CODEKNOWL_LLM_")
+        if default is None:
+            return None
+
+        coding = LlmConfig.try_from_env(prefix="CODEKNOWL_LLM_CODING_") or default
+        general = LlmConfig.try_from_env(prefix="CODEKNOWL_LLM_GENERAL_") or default
+        synth = LlmConfig.try_from_env(prefix="CODEKNOWL_LLM_SYNTH_") or general
+        return LlmProfiles(coding=coding, general=general, synth=synth)
+
 
 class OpenAiCompatibleClient:
     def __init__(self, config: LlmConfig):

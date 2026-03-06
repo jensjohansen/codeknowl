@@ -188,6 +188,22 @@ flowchart TB
 - Impacts:
   - Affects serving capacity requirements and routing logic (general vs coding).
 
+### ITD-XX — Synthesizer LLM for multi-model QA
+- Status: Proposed
+- Business problem:
+  - We want evidence-grounded QA to benefit from multiple responder models (coding + general) while producing a single coherent answer.
+  - We need an on-prem synthesizer model that can reconcile conflicting claims, preserve citations, and provide calibrated uncertainty.
+- Options considered:
+  - Reuse the general-purpose LLM (e.g., GPT-OSS-20B)
+  - Dedicated synthesis model profile (TBD)
+- Chosen option:
+  - TBD
+- Primary reason:
+  - TBD
+- Impacts:
+  - Adds an additional model role and inference step to `qa.ask` latency/capacity planning.
+  - Requires an explicit evidence-sharing policy per model profile and audit logging of which models received which evidence.
+
 ### ITD-10 — Embeddings model: nomic-embed-text-v2-moe-GGUF
 - Status: Completed
 - Business problem:

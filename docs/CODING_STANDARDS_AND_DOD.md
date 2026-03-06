@@ -3,6 +3,8 @@
 ## Purpose
 This document defines repository-wide coding standards and Definition of Done (DoD) requirements for CodeKnowl.
 
+These standards and DoD checks must be applied before any push to the remote. Stated another way: we never push code to the remote unless it works and it passes our coding standards and Definition of Done.
+
 ---
 
 ## Automated CI Quality Gates

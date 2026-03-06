@@ -31,10 +31,13 @@ def _load_json(path: Path) -> Any:
 
 def load_snapshot_artifacts(data_dir: Path, repo_id: str, head_commit: str) -> dict[str, Any]:
     root = repo_snapshot_dir(data_dir, repo_id, head_commit)
+    chunks_path = root / "chunks.json"
+    chunks = _load_json(chunks_path) if chunks_path.exists() else []
     return {
         "files": _load_json(root / "files.json"),
         "symbols": _load_json(root / "symbols.json"),
         "calls": _load_json(root / "calls.json"),
+        "chunks": chunks,
     }
 
 

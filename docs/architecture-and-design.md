@@ -11,6 +11,12 @@ This document is the tactical and functional specification for CodeKnowl. It tra
 
 This document intentionally avoids making new technical choices. Where a concrete technology decision is required, it references the ITD register by ID.
 
+This document is expected to evolve as implementation proceeds through MVP and v1 deliverables. When new features, constraints, or better technical alternatives are discovered, the change-management process is:
+
+1. Add the discovered features or technical alternatives to the core documents (PRD, Architecture & Design, and Implementation Plan).
+2. Review all milestones marked as Done to determine whether deliverables must be revisited based on the change; if so, add the required work items to the tracker.
+3. Complete any required backfill work for previously completed milestones before resuming the milestone that was in progress when the change was introduced.
+
 ### 1.1 At a glance
 
 | Concern | Design intent |
@@ -25,7 +31,7 @@ This document intentionally avoids making new technical choices. Where a concret
 flowchart LR
   dev[Developer] -->|Q&A / navigation| codeknowl[CodeKnowl]
   op[Operator] -->|Admin / status| codeknowl
-  codeknowl -->|Clone/pull| git[Git Provider]
+  codeknowl -->|Read from local checkout for MVP| git[Git Provider]
   codeknowl -->|AuthN/AuthZ| idp[Identity Provider]
   codeknowl -->|Chat/embeddings/rerank| models[Model Services]
 ```
@@ -85,7 +91,7 @@ flowchart LR
 | --- | --- | --- |
 | IDE Extension | UI, commands, citation navigation | Interactive |
 | Backend API | Auth, orchestration, query routing | Interactive |
-| Ingestion | Clone/pull, repo snapshots | Async |
+| Ingestion | Manage repo onboarding and snapshot metadata (MVP: local checkout) | Async |
 | Indexing pipeline | Parse/extract/chunk/embed/index | Async |
 | Relationship service | Traversals / impact analysis | Interactive |
 | Semantic retrieval | Vector search + rerank | Interactive |
@@ -124,11 +130,15 @@ Key behaviors:
 ### 6.3 Ingestion Service
 Responsibilities:
 - Manage repository onboarding.
-- Clone/pull repositories.
+- MVP: validate and read from an already-cloned local checkout.
 - Track last indexed commit per repo and branch.
 
+Security constraints:
+- CodeKnowl must not store Git credentials/secrets in its own database for MVP/v1 onboarding.
+- Clone/pull authentication must rely on operator-managed system Git configuration (e.g., SSH agent, Git credential helper/keychain) to minimize attack surface and avoid handling long-lived secrets.
+
 Key behaviors:
-- Validate credentials.
+- Validate repo accessibility (MVP: local path is a git repository).
 - Maintain local working copies or content-addressed snapshots.
 - Emit “repo updated” events into job queue.
 
@@ -168,6 +178,7 @@ Responsibilities:
 - Route requests to the appropriate model role:
   - general-purpose LLM
   - coding-specialized LLM
+  - synthesizer LLM (merge/reconcile multiple model outputs)
   - embeddings model
   - reranking model
 
@@ -270,10 +281,10 @@ Canonicalization and edge cases (implementation notes):
 ## 8. Key workflows and sequences
 
 ### 8.1 Repository onboarding
-1. Operator/developer provides repo URL and auth.
-2. Backend validates and registers repo.
-3. Ingestion clones/pulls default branch.
-4. Indexing pipeline performs full index for snapshot.
+1. Operator/developer provides a local filesystem path to an already-cloned repository.
+2. Backend validates and registers the repo.
+3. Ingestion reads the working copy and resolves the current snapshot (commit hash).
+4. Indexing pipeline performs a full index for the snapshot.
 5. Status becomes “indexed” with last indexed commit.
 
 ```mermaid
@@ -283,8 +294,8 @@ sequenceDiagram
   participant ING as Ingestion
   participant PIPE as Indexing Pipeline
   participant S as Stores
-  U->>API: Register repo + auth
-  API->>ING: Validate + clone/pull
+  U->>API: Register repo (local path)
+  API->>ING: Validate + read local checkout
   ING-->>API: Snapshot (commit hash)
   API->>PIPE: Enqueue full index job
   PIPE->>S: Write entities/edges/chunks/embeddings
@@ -307,8 +318,9 @@ sequenceDiagram
    - relationship traversal retrieval (for symbols/paths)
    - optional reranking
 4. Backend builds an evidence bundle with citations.
-5. LLM generates an answer constrained to evidence.
-6. IDE displays response with citations.
+5. Backend generates candidate answers using multiple responder models (e.g., coding + general), each constrained to the shared evidence bundle.
+6. Backend synthesizes a final answer using a synthesizer model that reconciles conflicts and preserves citations.
+7. IDE displays response with citations.
 
 ### 8.3 Relationship navigation (callers/callees/impact)
 1. IDE requests relationship query for symbol.
@@ -397,7 +409,7 @@ flowchart TB
 - **Operational complexity**: avoid bundling scanners and avoid OSS Docker images in MVP.
 
 ## 13. Open questions
-- MVP language priority ordering within: Java, Python, Rust, Go, JavaScript, TypeScript.
+- MVP language set (for deterministic extraction): Python, JavaScript, TypeScript, Java.
 - Symbol identity strategy across incremental updates.
 - How to represent ambiguous relationships or partial parsing.
 - Findings schema normalization rules and fingerprinting strategy.

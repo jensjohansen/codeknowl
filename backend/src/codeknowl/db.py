@@ -13,6 +13,13 @@ import sqlite3
 from pathlib import Path
 
 
+def _ensure_column(conn: sqlite3.Connection, *, table: str, column: str, ddl_fragment: str) -> None:
+    cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column in cols:
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl_fragment}")
+
+
 def get_db_path(data_dir: Path) -> Path:
     return data_dir / "codeknowl.db"
 
@@ -30,10 +37,16 @@ def init_schema(conn: sqlite3.Connection) -> None:
         CREATE TABLE IF NOT EXISTS repos (
             repo_id TEXT PRIMARY KEY,
             local_path TEXT NOT NULL,
+            accepted_branch TEXT NOT NULL DEFAULT 'main',
+            preferred_remote TEXT,
             created_at_utc TEXT NOT NULL
         )
         """
     )
+
+    # Lightweight forward-only migrations for dev-local SQLite.
+    _ensure_column(conn, table="repos", column="accepted_branch", ddl_fragment="TEXT NOT NULL DEFAULT 'main'")
+    _ensure_column(conn, table="repos", column="preferred_remote", ddl_fragment="TEXT")
 
     conn.execute(
         """

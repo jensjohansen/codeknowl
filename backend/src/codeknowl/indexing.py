@@ -52,6 +52,10 @@ def _should_ignore_path(path: Path) -> bool:
     return False
 
 
+def should_ignore_path(path: Path) -> bool:
+    return _should_ignore_path(path)
+
+
 def _range_from_node(node) -> SourceRange:
     start = node.start_point  # (row, column), 0-based
     end = node.end_point
@@ -83,6 +87,22 @@ def build_file_inventory(repo_path: Path) -> list[FileRecord]:
         )
 
     records.sort(key=lambda r: r.path)
+    return records
+
+
+def build_file_records_for_paths(repo_path: Path, rel_paths: set[str]) -> list[FileRecord]:
+    records: list[FileRecord] = []
+    for rel in sorted(rel_paths):
+        p = repo_path / rel
+        if not p.is_file():
+            continue
+        if _should_ignore_path(p):
+            continue
+        try:
+            size_bytes = p.stat().st_size
+        except OSError:
+            continue
+        records.append(FileRecord(path=rel, language=_file_language(p), size_bytes=size_bytes))
     return records
 
 
@@ -225,5 +245,46 @@ def extract_symbols_and_calls(repo_path: Path) -> tuple[list[SymbolRecord], list
             elif lang == "java":
                 _add_java_symbols(symbols, node=node, code_bytes=code_bytes, rel_path=rel_path)
                 _add_java_calls(calls, node=node, code_bytes=code_bytes, rel_path=rel_path)
+
+    return symbols, calls
+
+
+def extract_symbols_and_calls_for_paths(
+    repo_path: Path, rel_paths: set[str]
+) -> tuple[list[SymbolRecord], list[CallRecord]]:
+    symbols: list[SymbolRecord] = []
+    calls: list[CallRecord] = []
+
+    for rel in sorted(rel_paths):
+        p = repo_path / rel
+        if not p.is_file():
+            continue
+        if _should_ignore_path(p):
+            continue
+
+        lang = _file_language(p)
+        if lang not in {"python", "javascript", "typescript", "java"}:
+            continue
+
+        try:
+            code_bytes = p.read_bytes()
+        except OSError:
+            continue
+
+        parser = get_parser(lang)
+        tree = parser.parse(code_bytes)
+        root = tree.root_node
+
+        nodes = _walk_tree(root)
+        for node in nodes:
+            if lang == "python":
+                _add_python_symbols(symbols, node=node, code_bytes=code_bytes, rel_path=rel)
+                _add_python_calls(calls, node=node, code_bytes=code_bytes, rel_path=rel)
+            elif lang in {"javascript", "typescript"}:
+                _add_js_ts_symbols(symbols, node=node, code_bytes=code_bytes, rel_path=rel)
+                _add_js_ts_calls(calls, node=node, code_bytes=code_bytes, rel_path=rel)
+            elif lang == "java":
+                _add_java_symbols(symbols, node=node, code_bytes=code_bytes, rel_path=rel)
+                _add_java_calls(calls, node=node, code_bytes=code_bytes, rel_path=rel)
 
     return symbols, calls

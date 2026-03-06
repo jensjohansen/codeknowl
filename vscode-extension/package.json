@@ -16,7 +16,12 @@
     "Other"
   ],
   "activationEvents": [
-    "onCommand:codeknowl.ask"
+    "onCommand:codeknowl.ask",
+    "onCommand:codeknowl.selectRepo",
+    "onCommand:codeknowl.indexWorkspace",
+    "onCommand:codeknowl.explainCurrentFile",
+    "onCommand:codeknowl.whereDefined",
+    "onCommand:codeknowl.whatCalls"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -24,6 +29,26 @@
       {
         "command": "codeknowl.ask",
         "title": "CodeKnowl: Ask"
+      },
+      {
+        "command": "codeknowl.selectRepo",
+        "title": "CodeKnowl: Select Active Repo"
+      },
+      {
+        "command": "codeknowl.indexWorkspace",
+        "title": "CodeKnowl: Index Current Workspace"
+      },
+      {
+        "command": "codeknowl.explainCurrentFile",
+        "title": "CodeKnowl: Explain Current File"
+      },
+      {
+        "command": "codeknowl.whereDefined",
+        "title": "CodeKnowl: Where Is Symbol Defined?"
+      },
+      {
+        "command": "codeknowl.whatCalls",
+        "title": "CodeKnowl: What Calls Symbol?"
       }
     ],
     "configuration": {
@@ -33,6 +58,11 @@
           "type": "string",
           "default": "http://localhost:8000",
           "description": "Base URL for the CodeKnowl backend HTTP API (e.g., http://localhost:8000)."
+        },
+        "codeknowl.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Optional API key for the CodeKnowl backend. If set, the extension will send it as the X-CodeKnowl-Api-Key header."
         }
       }
     }

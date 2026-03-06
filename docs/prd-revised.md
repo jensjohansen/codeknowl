@@ -9,6 +9,12 @@ CodeKnowl is an on-prem, local-first “codebase analyst” product. Given one o
 
 CodeKnowl exposes an AI Software Analyst experience to end users primarily through an IDE extension, with optional CI-oriented workflows, designed to operate without required cloud dependencies (beyond access to Git hosts).
 
+This PRD is expected to evolve as implementation proceeds through MVP and v1 deliverables. When new features, constraints, or better technical alternatives are discovered, the change-management process is:
+
+1. Add the discovered features or technical alternatives to the core documents (PRD, Architecture & Design, and Implementation Plan).
+2. Review all milestones marked as Done to determine whether deliverables must be revisited based on the change; if so, add the required work items to the tracker.
+3. Complete any required backfill work for previously completed milestones before resuming the milestone that was in progress when the change was introduced.
+
 ### 1.1 At a glance
 
 | Area | Summary |
@@ -97,9 +103,9 @@ Core workflows:
 
 ### 5.2 Repository onboarding workflow
 
-- Add one or more Git repo URLs.
-- Choose branches to index (initially: default/main branch).
-- Run initial ingestion and indexing.
+- Register one or more repositories with CodeKnowl.
+- MVP onboarding input is an already-cloned local checkout path (local-first).
+- Run initial indexing.
 - Verify indexing status and health.
 
 ### 5.3 Repository off-boarding workflow
@@ -146,6 +152,12 @@ sequenceDiagram
   - personal access tokens
   - SSH keys
 - Support air-gapped / offline operation except for Git access.
+
+MVP note:
+- For Milestones 0–2, CodeKnowl onboards repositories by local filesystem path to an existing clone.
+- URL onboarding (clone/pull without CodeKnowl-managed credentials) is deferred to a later milestone.
+  - Decision note: we explicitly do not request or store Git credentials inside CodeKnowl.
+  - Discover-and-register workflow supersedes “manual onboarding” by deriving repo metadata (accepted branch, preferred remote) from the local checkout and asking the user to confirm.
 
 #### 6.1.1 Repository off-boarding
 
@@ -210,6 +222,8 @@ CodeKnowl must support fully on-prem inference for the following model roles:
   - Used for summarization, explanation, and non-coding analyst tasks.
 - A **coding-specialized LLM**
   - Used for code-aware Q&A, impact analysis narratives, and optional agentic coding workflows.
+- A **synthesizer LLM**
+  - Used to merge and reconcile multiple model outputs into a single, high-quality answer grounded in a shared evidence bundle.
 - An **embeddings model**
   - Used to embed code and related text for semantic retrieval.
 - A **reranking model**
@@ -219,6 +233,10 @@ Requirements:
 
 - All model roles must be runnable without required external network calls.
 - The system must allow **model routing** by task type (coding vs general vs embedding vs rerank).
+- For evidence-grounded Q&A, the system must support a **multi-model synthesis pipeline**:
+  - retrieve evidence once (semantic + structured)
+  - generate candidate answers using multiple LLM roles (e.g., coding + general)
+  - synthesize a final answer using a synthesizer model that resolves conflicts and preserves citations
 - The system must support swapping models over time without breaking external APIs (stable contracts for:
   - chat completion
   - embeddings
@@ -266,6 +284,7 @@ Requirements:
 - **Reliability**: resilient to indexing failures; retry and resume.
 - **Security**:
   - secure storage of Git credentials
+    - Decision note: CodeKnowl does not store Git credentials; Git access (if/when required) relies on operator-managed system configuration (e.g., SSH agent, git credential helper).
   - least-privilege principles
   - local network-only by default
 - **Traceability**: answers should cite sources; relationship queries should be inspectable.
@@ -281,8 +300,10 @@ Requirements:
 ### 8.1 Core components (capabilities)
 
 - **Ingestion service**
-  - clones/pulls repos
-  - detects updates
+  - MVP: reads from an already-cloned local checkout
+  - resolves snapshots (commit hash) and tracks last indexed commit
+  - URL onboarding (clone/pull without CodeKnowl-managed credentials) and remote update detection are deferred to a later milestone
+    - Decision note: CodeKnowl must not request or store Git credentials; any clone/pull would rely on operator-managed system Git authentication.
 
 - **Analysis/indexing pipeline**
   - parsing, symbol extraction
@@ -329,44 +350,54 @@ Deliverable:
 - revised PRD approved
 - initial architecture diagram + component boundaries
 - buy-vs-build evaluation plan created
+- coding standards and Definition of Done (DoD) documented
+- CI quality gates scaffolded for backend and IDE extension
 
 Acceptance criteria:
 - The revised PRD is approved by product stakeholders.
 - A high-level component diagram exists and is understandable by non-engineering stakeholders.
 - The buy-vs-build evaluation plan clearly defines evaluation criteria, comparison scope, and decision owners.
+- Coding standards and milestone DoD expectations are written down and applied consistently.
+- CI runs the minimum quality gates for the MVP components (lint, typecheck, and tests/smoke where applicable).
 
 ### Milestone 1: Single-repo indexing MVP
 
 - ingest one repo
 - generate basic structured representation (files, symbols, imports, calls at minimum)
-- build semantic index
 - simple query API (internal)
+- basic CLI/API for repo lifecycle (register, list, index, status)
+- repository off-boarding (operator-driven)
 
 Acceptance criteria:
-- Given a repository URL and credentials, the system can complete an initial indexing run and report completion.
+- Given a local filesystem path to an already-cloned git repository, the system can complete an initial indexing run and report completion.
 - A user can ask at least:
   - “What does this file/module do?”
   - “Where is this function/symbol defined?”
   - “What calls this function?”
 - Each answer includes citations to source locations (file path + line range).
 - Index state is visible for the repo (last indexed commit and last successful run time).
+- An operator can off-board a repository so it is no longer queryable.
+- Backend smoke test(s) and CI gates are documented and pass for this milestone.
 
 ### Milestone 2: IDE extension MVP
 
 - chat with citations
 - explain file / symbol
 - simple relationship navigation
+- IDE-to-backend integration is validated via CI gates
 
 Acceptance criteria:
 - From within the IDE, a user can:
-  - index the current repo/workspace
+  - index the current repo/workspace (MVP: by registering the local filesystem path to an already-cloned repository)
   - ask a question and receive an answer with citations
   - request “explain file/module” and receive a summary with citations
   - navigate at least one relationship query (e.g., callers/callees/definitions) with clickable locations.
 - The IDE experience clearly indicates indexing status and failure states.
+- The VS Code extension passes linting, typechecking, and tests in CI.
 
 ### Milestone 3: Incremental updates
 
+- build semantic index (chunks + embeddings + vector retrieval)
 - detect and process new commits
 - update relationship store + semantic index incrementally
 - indexing status UI/commands
@@ -390,6 +421,61 @@ Acceptance criteria:
   - system health status
 - The system meets a defined reliability target for indexing jobs over a representative time window.
 
+### Milestone 5: Durable job queue + workers
+
+- Move indexing/update workloads into a durable job queue with retries.
+- Keep HTTP endpoints as thin job enqueuers with status polling.
+
+Acceptance criteria:
+- Indexing and update operations run asynchronously via a worker queue and are retryable.
+- Job status and failure reasons are visible to operators.
+
+### Milestone 6: Observability stack alignment
+
+- Align metrics/logs export for Loki + Prometheus/Grafana.
+- Provide operator guidance for dashboards/alerts.
+
+Acceptance criteria:
+- Metrics and logs are exportable/consumable by the chosen observability stack.
+- Operator runbook documents how to observe indexing throughput, failures, and job lag.
+
+### Milestone 7: Graph relationship store (NebulaGraph)
+
+- Implement the structured relationship store in NebulaGraph (nGQL) for traversal queries.
+
+Acceptance criteria:
+- Structured entities/edges are persisted in the graph store and queryable for relationship navigation.
+
+### Milestone 8: Findings ingestion (scanner integrations)
+
+- Ingest scanner outputs (e.g., SARIF/JSON) as optional enrichment linked to repos/snapshots.
+
+Acceptance criteria:
+- Findings can be ingested and queried by repo/snapshot with traceable file/location links.
+
+### Milestone 9: Admin UI + non-engineer access
+
+- Provide a basic web UI for operators and non-engineers to access repo status and Q&A.
+
+Acceptance criteria:
+- Operators can manage repo lifecycle and view indexing status via a web UI.
+- Non-engineers can access Q&A with citations via a web UI (within authorized scope).
+
+### Milestone 10: URL onboarding (no credential storage)
+
+- Optional repo onboarding by clone URL, without CodeKnowl requesting or storing Git credentials.
+
+Acceptance criteria:
+- Repos can be registered by URL and (if/when clone/pull is implemented) Git authentication relies on operator-managed system Git configuration.
+
+### Milestone 11: Optional agentic workflows (guardrailed)
+
+- Add multi-step agentic workflows that propose changes and require explicit user approval.
+
+Acceptance criteria:
+- Proposed code changes are shown as diffs/previews and require explicit approval before writing.
+- Any command execution requires explicit approval and captured output.
+
 ### 10.1 Milestone summary (table)
 
 | Milestone | Theme | User-visible outcome |
@@ -399,6 +485,13 @@ Acceptance criteria:
 | 2 | IDE extension MVP | IDE chat + explain + basic relationship navigation |
 | 3 | Incremental updates | Keep indexes fresh as commits land |
 | 4 | Multi-repo + hardening | Multiple repos, access control, reliability/observability |
+| 5 | Job queue + workers | Durable indexing/update jobs with retries and operator-visible status |
+| 6 | Observability alignment | Prometheus/Grafana + Loki-aligned metrics/logs and operator guidance |
+| 7 | Graph store integration | NebulaGraph-backed structured relationship storage and traversal queries |
+| 8 | Findings ingestion | Scanner findings ingested and linked to snapshots with citations |
+| 9 | Admin + non-engineer UI | Web UI for operators and non-engineers (authorized) |
+| 10 | URL onboarding | Register by URL; no CodeKnowl credential storage |
+| 11 | Agentic workflows | Guardrailed multi-step workflows with explicit approvals |
 
 ```mermaid
 gantt
@@ -411,6 +504,13 @@ gantt
   Milestone 2 (IDE MVP) :m2, after m1, 28d
   Milestone 3 (incremental) :m3, after m2, 28d
   Milestone 4 (multi-repo) :m4, after m3, 28d
+  Milestone 5 (jobs) :m5, after m4, 28d
+  Milestone 6 (observability) :m6, after m5, 28d
+  Milestone 7 (graph store) :m7, after m6, 28d
+  Milestone 8 (findings) :m8, after m7, 28d
+  Milestone 9 (web UI) :m9, after m8, 28d
+  Milestone 10 (URL onboarding) :m10, after m9, 28d
+  Milestone 11 (agentic) :m11, after m10, 28d
 ```
 
 ## 11. Success Metrics
@@ -437,8 +537,27 @@ gantt
 
 ## 13. Open Questions
 
-- Which languages should be in the MVP set?
-- What is the authoritative schema for the structured relationship representation?
-- How should multi-tenant/multi-team access be modeled (if needed)?
-- What level of “agentic coding” is desired in v1 vs later?
-- How do we package/install for customers (including air-gapped installs)?
+The following items were previously open questions. They are now captured as the current plan/intent and can be revised as research and implementation proceeds.
+
+- MVP language set:
+  - MVP indexing and deterministic relationship extraction will target: Python, JavaScript, TypeScript, Java.
+  - Additional languages (e.g., Go, Rust, etc.) are deferred until after the MVP proves end-to-end value.
+- Authoritative schema for structured relationships:
+  - We do not expect to define a fully authoritative schema upfront.
+  - The schema will evolve incrementally as we incorporate analysis/extraction tools, with explicit versioning and provenance, extending the internal representation as needed.
+- Multi-tenant / multi-team access model:
+  - Deferred for now.
+  - Deployment expectation: CodeKnowl services will run inside a Kubernetes cluster and be reachable by IDE extensions via an operator-managed ingress pattern (e.g., Cloudflare Tunnel or equivalent).
+- “Agentic” roadmap scope:
+  - MVP: ask questions about the codebase with citations and traceability.
+  - Later versions: recommend refactors for security, scalability, performance, and anti-pattern/design-pattern alignment.
+  - Long-term: extract business rules and architectural patterns, produce PRD-like artifacts, and enable re-implementation against alternative ITDs/tech stacks for major scale shifts (e.g., replacing a Java monolith with an HTAP/event pipeline architecture to support 100x–1000x event volume).
+- Packaging / installation:
+  - VS Code extension will be packaged and distributed through the standard VS Code mechanism.
+  - Backend/services will target Kubernetes deployments, with Helm charts as the primary packaging mechanism; consider an operator pattern (deployed by Helm) where instances are managed by CRDs.
+
+## 14. Parking Lot (Post-MVP / Post-v1)
+
+- Higher-order agent workflows:
+  - “How should we scale this system to handle 100x more events?” style multi-step architecture reasoning.
+  - Organization-level refactoring and modernization planning workflows.
