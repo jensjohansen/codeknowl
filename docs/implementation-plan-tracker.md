@@ -602,14 +602,14 @@ Milestone status: Done
 
 ## Milestone 8 — Findings ingestion (scanner integrations)
 
-Milestone status: Not started
+Milestone status: Done
 
 ### Definition of Done (PRD acceptance criteria)
 - Findings can be ingested and queried by repo/snapshot with traceable file/location links.
 
 ### Work items
-- [ ] ITD-19 Scanner integrations (SonarQube + Semgrep)
-  - Status: Not started
+- [x] ITD-19 Scanner integrations (SonarQube + Semgrep)
+  - Status: Done
   - Owner:
   - Target date:
   - Notes: Add ingestion pipeline for findings (SARIF/JSON) and storage/query semantics.
