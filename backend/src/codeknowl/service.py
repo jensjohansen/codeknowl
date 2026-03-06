@@ -22,6 +22,7 @@ from codeknowl.artifacts import artifacts_root, dump_dataclasses, repo_snapshot_
 from codeknowl.ask import answer_with_llm_synthesis, build_evidence_bundle
 from codeknowl.chunking import ChunkRecord, chunk_repo_files, dump_chunks
 from codeknowl.embeddings import embeddings_client_from_env
+from codeknowl.findings_ingestion import create_findings_ingestion_service
 from codeknowl.graph_ingestion import create_ingestion_service
 from codeknowl.graph_store import create_graph_store
 from codeknowl.relationship_service import create_relationship_service
@@ -125,6 +126,9 @@ class CodeKnowlService:
             self._graph_store = None
             self._graph_ingestion = None
             self._relationship_service = None
+        
+        # Initialize findings ingestion service
+        self._findings_ingestion = create_findings_ingestion_service(data_dir)
 
     def _index_semantic_snapshot(
         self,
@@ -909,3 +913,95 @@ class CodeKnowlService:
         repo_path = Path(repo.local_path)
         
         return self._graph_ingestion.ingest_repository(repo_path, repo_id)
+
+    def ingest_findings(self, repo_id: str, findings_data: dict[str, Any], scanner_name: str) -> dict[str, Any]:
+        """Ingest findings from scanner output.
+
+        Why this exists:
+        - Implements SARIF/JSON ingestion pipeline as required by Architecture & Design.
+        - Links findings to repos/snapshots with traceable file/location links.
+        - Supports PRD requirement for findings ingestion as optional enrichment.
+        
+        Args:
+            repo_id: Repository identifier
+            findings_data: Scanner output data (SARIF/JSON)
+            scanner_name: Scanner name for tracking
+            
+        Returns:
+            Ingestion report
+        """
+        repo = self.get_repo(repo_id)
+        snapshot_id = get_head_commit(Path(repo.local_path))
+        
+        return self._findings_ingestion.ingest_findings_from_data(
+            findings_data, repo_id, snapshot_id, scanner_name
+        )
+
+    def query_findings(
+        self,
+        repo_id: str,
+        snapshot_id: str | None = None,
+        severity_filter: list[str] | None = None,
+        rule_filter: list[str] | None = None,
+        file_filter: list[str] | None = None,
+        limit: int | None = None
+    ) -> dict[str, Any]:
+        """Query findings with filters.
+
+        Why this exists:
+        - Provides findings query capabilities as required by Architecture & Design.
+        - Supports filtering by repo/snapshot with traceable file/location links.
+        - Enables flexible findings exploration and analysis.
+        
+        Args:
+            repo_id: Repository identifier
+            snapshot_id: Optional snapshot identifier
+            severity_filter: Optional severity levels to include
+            rule_filter: Optional rule IDs to include
+            file_filter: Optional file paths to include
+            limit: Optional result limit
+            
+        Returns:
+            Query results
+        """
+        return self._findings_ingestion.query_findings(
+            repo_id=repo_id,
+            snapshot_id=snapshot_id,
+            severity_filter=severity_filter,
+            rule_filter=rule_filter,
+            file_filter=file_filter,
+            limit=limit
+        )
+
+    def get_findings_summary(self, repo_id: str, snapshot_id: str | None = None) -> dict[str, Any]:
+        """Get findings summary.
+
+        Why this exists:
+        - Provides high-level findings overview.
+        - Supports dashboard and monitoring needs.
+        - Enables trend analysis across snapshots.
+        
+        Args:
+            repo_id: Repository identifier
+            snapshot_id: Optional snapshot identifier
+            
+        Returns:
+            Findings summary
+        """
+        return self._findings_ingestion.get_finding_summary(repo_id, snapshot_id)
+
+    def delete_findings(self, repo_id: str, snapshot_id: str | None = None) -> dict[str, Any]:
+        """Delete findings.
+
+        Why this exists:
+        - Supports cleanup of old or invalid findings.
+        - Enables re-ingestion with corrected data.
+        
+        Args:
+            repo_id: Repository identifier
+            snapshot_id: Optional snapshot identifier
+            
+        Returns:
+            Deletion result
+        """
+        return self._findings_ingestion.delete_findings(repo_id, snapshot_id)

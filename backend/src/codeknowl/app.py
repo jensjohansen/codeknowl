@@ -15,7 +15,7 @@ from pathlib import Path
 
 from blacksheep import Application, Content, Response
 
-from codeknowl.async_service import create_async_service
+from codeknowl.async_service import AsyncCodeKnowlService, create_async_service
 from codeknowl.audit import (
     audit,
     audit_fields_from_auth_context,
@@ -746,5 +746,163 @@ async def create_app(config: AppConfig | None = None) -> Application:
     _register_metrics_routes(app)
     _register_repo_routes(app, async_service, group_config=group_config)
     _register_qa_routes(app, async_service, group_config=group_config)
+    _register_findings_routes(app, async_service, group_config=group_config)
 
     return app
+
+
+def _register_findings_routes(app: Application, service: AsyncCodeKnowlService, *, group_config: GroupAuthzConfig) -> None:
+    """Register findings ingestion and query routes.
+
+    Why this exists:
+    - Provides API endpoints for findings ingestion as required by Architecture & Design.
+    - Supports SARIF/JSON upload and query with traceable file/location links.
+    - Implements PRD requirement for findings ingestion as optional enrichment.
+    
+    Args:
+        app: BlackSheep application
+        service: Async service instance
+        group_config: Group authorization configuration
+    """
+    
+    def ingest_findings(repo_id: str, request) -> Response:
+        """Ingest findings from scanner output."""
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="write")
+        if forbidden is not None:
+            return forbidden
+        
+        try:
+            data = request.json()
+            findings_data = data.get("findings")
+            scanner_name = data.get("scanner_name", "unknown")
+            
+            if not findings_data:
+                return _json_response(
+                    {"error": "Missing 'findings' field in request body"}, 
+                    status=400
+                )
+            
+            result = service.ingest_findings(repo_id, findings_data, scanner_name)
+            
+            if result.get("success"):
+                return _json_response(result, status=201)
+            else:
+                return _json_response(result, status=400)
+                
+        except Exception as e:
+            audit().log(
+                "findings.ingest.error",
+                fields={
+                    **audit_fields_from_request(request),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
+                    "request.id": _get_request_id(request),
+                    "repo.id": repo_id,
+                    "error": str(e),
+                },
+            )
+            return _json_response({"error": "Internal server error"}, status=500)
+    
+    def query_findings(repo_id: str, request) -> Response:
+        """Query findings with filters."""
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
+        if forbidden is not None:
+            return forbidden
+        
+        try:
+            data = request.json() if request.content else {}
+            snapshot_id = data.get("snapshot_id")
+            severity_filter = data.get("severity_filter")
+            rule_filter = data.get("rule_filter")
+            file_filter = data.get("file_filter")
+            limit = data.get("limit")
+            
+            result = service.query_findings(
+                repo_id=repo_id,
+                snapshot_id=snapshot_id,
+                severity_filter=severity_filter,
+                rule_filter=rule_filter,
+                file_filter=file_filter,
+                limit=limit
+            )
+            
+            if result.get("success"):
+                return _json_response(result)
+            else:
+                return _json_response(result, status=400)
+                
+        except Exception as e:
+            audit().log(
+                "findings.query.error",
+                fields={
+                    **audit_fields_from_request(request),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
+                    "request.id": _get_request_id(request),
+                    "repo.id": repo_id,
+                    "error": str(e),
+                },
+            )
+            return _json_response({"error": "Internal server error"}, status=500)
+    
+    def get_findings_summary(repo_id: str, request) -> Response:
+        """Get findings summary."""
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="read")
+        if forbidden is not None:
+            return forbidden
+        
+        try:
+            snapshot_id = request.query.get("snapshot_id")
+            
+            result = service.get_findings_summary(repo_id, snapshot_id)
+            
+            if result.get("success"):
+                return _json_response(result)
+            else:
+                return _json_response(result, status=400)
+                
+        except Exception as e:
+            audit().log(
+                "findings.summary.error",
+                fields={
+                    **audit_fields_from_request(request),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
+                    "request.id": _get_request_id(request),
+                    "repo.id": repo_id,
+                    "error": str(e),
+                },
+            )
+            return _json_response({"error": "Internal server error"}, status=500)
+    
+    def delete_findings(repo_id: str, request) -> Response:
+        """Delete findings."""
+        forbidden = _require_repo_access(request, group_config=group_config, repo_id=repo_id, op="write")
+        if forbidden is not None:
+            return forbidden
+        
+        try:
+            snapshot_id = request.query.get("snapshot_id")
+            
+            result = service.delete_findings(repo_id, snapshot_id)
+            
+            if result.get("success"):
+                return _json_response(result)
+            else:
+                return _json_response(result, status=400)
+                
+        except Exception as e:
+            audit().log(
+                "findings.delete.error",
+                fields={
+                    **audit_fields_from_request(request),
+                    **audit_fields_from_auth_context(_get_auth_context(request)),
+                    "request.id": _get_request_id(request),
+                    "repo.id": repo_id,
+                    "error": str(e),
+                },
+            )
+            return _json_response({"error": "Internal server error"}, status=500)
+    
+    # Register routes
+    app.router.add_post("/repos/{repo_id}/findings", ingest_findings)
+    app.router.add_post("/repos/{repo_id}/findings/query", query_findings)
+    app.router.add_get("/repos/{repo_id}/findings/summary", get_findings_summary)
+    app.router.add_delete("/repos/{repo_id}/findings", delete_findings)
